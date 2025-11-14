@@ -42,25 +42,53 @@ all_delivery = []
 for f in delivery_files:
     date_str = f.replace("nse_delivery_", "").replace(".csv", "")
     date = datetime.strptime(date_str, '%Y%m%d')
-    
+
     df_d = pd.read_csv(os.path.join(nse_raw_dir, f))
     if " SYMBOL" in df_d.columns:
         df_d = df_d.rename(columns={" SYMBOL": "SYMBOL", " DELIV_PER": "DELIV_PER"})
+
+    # Rename delivery quantity column variants to DELIV_QTY
+    if " DELIV_QTY" in df_d.columns:
+        df_d.rename(columns={" DELIV_QTY": "DELIV_QTY"}, inplace=True)
+    elif " DELIV" in df_d.columns:
+        df_d.rename(columns={" DELIV": "DELIV_QTY"}, inplace=True)
+    elif "DELIV" in df_d.columns:
+        df_d.rename(columns={"DELIV": "DELIV_QTY"}, inplace=True)
+
+    if "DELIV_PER" not in df_d.columns:
+        df_d["DELIV_PER"] = pd.NA
+    if "DELIV_QTY" not in df_d.columns:
+        df_d["DELIV_QTY"] = 0
+
     df_d["DATE"] = date
     all_delivery.append(df_d)
 
 if len(all_delivery) > 0:
     df_delivery_all = pd.concat(all_delivery, ignore_index=True)
     print(f"Delivery data loaded: {len(df_delivery_all)} rows")
-    
+
     df_all = df_all.merge(
-        df_delivery_all[["SYMBOL", "DATE", "DELIV_PER"]], 
-        on=["SYMBOL", "DATE"], 
+        df_delivery_all[["SYMBOL", "DATE", "DELIV_PER", "DELIV_QTY"]],
+        on=["SYMBOL", "DATE"],
         how="left"
     )
+    print("\n--- DEBUG: Sample merged delivery quantity ---")
+
+    # Convert DELIV_QTY to numeric before any comparisons or printing
+    df_all["DELIV_QTY"] = pd.to_numeric(df_all["DELIV_QTY"], errors='coerce').fillna(0)
+
+    print(df_all[["SYMBOL", "DATE", "DELIV_QTY"]].head(10))
+    print(f"Total symbols with DELIV_QTY > 0: {(df_all['DELIV_QTY'] > 0).sum()}")
+
     df_all["DELIV_PER"] = pd.to_numeric(df_all["DELIV_PER"], errors='coerce').fillna(50)
+
+    df_all["DELIV_QTY"] = pd.to_numeric(df_all["DELIV_QTY"], errors='coerce').fillna(0)
 else:
     df_all["DELIV_PER"] = 50
+    df_all["DELIV_QTY"] = 0
+
+# Calculate delivery turnover
+df_all["DELIVERY_TURNOVER"] = df_all["DELIV_QTY"] * df_all["CLOSE"]
 
 # Convert to numeric
 df_all["CLOSE"] = pd.to_numeric(df_all["CLOSE"], errors='coerce').fillna(0)
@@ -68,7 +96,7 @@ df_all["TOTTRDQTY"] = pd.to_numeric(df_all["TOTTRDQTY"], errors='coerce').fillna
 df_all["TOTTRDVAL"] = pd.to_numeric(df_all["TOTTRDVAL"], errors='coerce').fillna(0)
 
 # Calculate metrics
-df_all["DELIVERY_TURNOVER"] = df_all["TOTTRDQTY"] * df_all["CLOSE"]
+df_all["DELIVERY_TURNOVER"] = df_all["DELIV_QTY"] * df_all["CLOSE"]
 df_all["ATW"] = df_all["TOTTRDVAL"] / 1000
 
 # Filter equity only

@@ -164,7 +164,8 @@ else:
 
 # Fix missing columns before usage
 if "DELIVERY_TURNOVER" not in df_all.columns:
-    df_all["DELIVERY_TURNOVER"] = df_all["TOTTRDQTY"] * df_all["CLOSE"]
+    df_all["DELIVERY_TURNOVER"] = df_all["DELIV_QTY"] * df_all["CLOSE"]
+
 
 if "ATW" not in df_all.columns:
     df_all["ATW"] = df_all["TOTTRDVAL"] / 1000
@@ -180,31 +181,57 @@ for f in delivery_files:
     date_str = f.replace("nse_delivery_", "").replace(".csv", "")
     date = datetime.strptime(date_str, '%Y%m%d')
     df_d = pd.read_csv(os.path.join(nse_raw_dir, f))
+
+    # Rename columns to standard names
     if " SYMBOL" in df_d.columns:
         df_d = df_d.rename(columns={" SYMBOL": "SYMBOL", " DELIV_PER": "DELIV_PER"})
+
+    # Rename delivery quantity column variants to DELIV_QTY
+    if " DELIV_QTY" in df_d.columns:
+        df_d.rename(columns={" DELIV_QTY": "DELIV_QTY"}, inplace=True)
+    elif " DELIV" in df_d.columns:
+        df_d.rename(columns={" DELIV": "DELIV_QTY"}, inplace=True)
+    elif "DELIV" in df_d.columns:
+        df_d.rename(columns={"DELIV": "DELIV_QTY"}, inplace=True)
+
+    # Fill missing columns with default values
     if "DELIV_PER" not in df_d.columns:
         df_d["DELIV_PER"] = pd.NA
+    if "DELIV_QTY" not in df_d.columns:
+        df_d["DELIV_QTY"] = 0
+
     df_d["DATE"] = date
     all_delivery.append(df_d)
 
 if len(all_delivery) > 0:
     df_delivery_all = pd.concat(all_delivery, ignore_index=True)
-    df_all = df_all.merge(df_delivery_all[["SYMBOL", "DATE", "DELIV_PER"]],
-                          on=["SYMBOL", "DATE"], how="left", suffixes=('', '_nse'))
+    # Merge delivery percent and quantity columns
+    df_all = df_all.merge(
+        df_delivery_all[["SYMBOL", "DATE", "DELIV_PER", "DELIV_QTY"]],
+        on=["SYMBOL", "DATE"], how="left", suffixes=('', '_nse')
+    )
+
     # Combine delivery percent columns safely
     if 'DELIV_PER' in df_all.columns and 'DELIV_PER_nse' in df_all.columns:
         df_all['DELIV_PER'] = df_all['DELIV_PER'].combine_first(df_all['DELIV_PER_nse'])
         df_all.drop(columns=['DELIV_PER_nse'], inplace=True)
+
+    # Ensure numeric types and fill missing values
+    df_all["DELIV_PER"] = pd.to_numeric(df_all["DELIV_PER"], errors='coerce').fillna(60)
+    df_all["DELIV_QTY"] = pd.to_numeric(df_all["DELIV_QTY"], errors='coerce').fillna(0)
 else:
     df_all["DELIV_PER"] = 60
+    df_all["DELIV_QTY"] = 0
 
-df_all["DELIV_PER"] = pd.to_numeric(df_all["DELIV_PER"], errors='coerce').fillna(60)
+# Calculate delivery turnover based on merged deliverable quantity
+df_all["DELIVERY_TURNOVER"] = df_all["DELIV_QTY"] * df_all["CLOSE"]
 
 # ===== CALCULATE METRICS =====
 df_all["CLOSE"] = pd.to_numeric(df_all["CLOSE"], errors='coerce').fillna(0)
 df_all["TOTTRDQTY"] = pd.to_numeric(df_all["TOTTRDQTY"], errors='coerce').fillna(0)
 df_all["TOTTRDVAL"] = pd.to_numeric(df_all["TOTTRDVAL"], errors='coerce').fillna(0)
-df_all["DELIVERY_TURNOVER"] = df_all["TOTTRDQTY"] * df_all["CLOSE"]
+df_all["DELIVERY_TURNOVER"] = df_all["DELIV_QTY"] * df_all["CLOSE"]
+
 df_all["ATW"] = df_all["TOTTRDVAL"] / 1000
 # ===== FILTERS =====
 print(f"Before SERIES filter: Total={len(df_all)}, BSE={len(df_all[df_all['EXCHANGE']=='BSE'])}")
