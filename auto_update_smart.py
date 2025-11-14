@@ -1,4 +1,5 @@
 import os
+import glob
 import pandas as pd
 from datetime import datetime, timedelta
 from nse_downloader_fixed_nov2025 import NSEDownloaderFixed
@@ -59,7 +60,8 @@ else:
             current_date += timedelta(days=1)
             continue
         
-        print(f"📥 {current_date.strftime('%d %b')} - ", end="")
+        print(f"[DOWNLOAD] {current_date.strftime('%d %b')} - ", end="")
+
         
         # Download NSE
         df_bhav, ok_bhav, _ = nse_downloader.download_nse_bhav_new_format(current_date)
@@ -82,12 +84,7 @@ else:
     if downloaded > 0:
         print(f"\nDownloaded: {downloaded} days")
 
-# Calculate REAL progressives (NSE + BSE with STRICT NSE preference)
-print("\n" + "=" * 70)
-print("CALCULATING PROGRESSIVE INDICATORS (NSE + BSE)")
-print("=" * 70)
-
-# ===== LOAD NSE DATA =====
+# ==== LOAD NSE DATA ====
 nse_raw_dir = Config.NSE_RAW_DIR
 nse_bhav_files = sorted([f for f in os.listdir(nse_raw_dir) if f.startswith("nse_bhav_")])
 print(f"Loading {len(nse_bhav_files)} NSE files...")
@@ -104,77 +101,78 @@ for f in nse_bhav_files:
 df_nse = pd.concat(nse_data, ignore_index=True)
 print(f"NSE records: {len(df_nse)}")
 
-# ===== LOAD BSE DATA =====
-bse_raw_dir = "data/bse_raw"
-if os.path.exists(bse_raw_dir):
-    bse_bhav_files = sorted([f for f in os.listdir(bse_raw_dir) if f.startswith("bse_bhav_")])
-    print(f"Loading {len(bse_bhav_files)} BSE files...")
-    
-    bse_data = []
-    for f in bse_bhav_files:
-        date_str = f.replace("bse_bhav_", "").replace(".csv", "")
-        date = datetime.strptime(date_str, '%Y%m%d')
-        df = pd.read_csv(os.path.join(bse_raw_dir, f))
-        df["DATE"] = date
-        df["EXCHANGE"] = "BSE"
-        
-        # Rename BSE columns to match NSE format
-        rename_map = {
-            "TckrSymb": "SYMBOL",
-            "ClsPric": "CLOSE",
-            "TtlTradgVol": "TOTTRDQTY",
-            "TtlTrfVal": "TOTTRDVAL",
-            "ISIN": "ISIN"
-        }
-        
-        rename_map = {k: v for k, v in rename_map.items() if k in df.columns}
-        if rename_map:
-            df = df.rename(columns=rename_map)
-        
-        if "SYMBOL" not in df.columns and "FinInstrmNm" in df.columns:
-            df = df.rename(columns={"FinInstrmNm": "SYMBOL"})
-        
-        bse_data.append(df)
-    
-    if bse_data:
-        df_bse = pd.concat(bse_data, ignore_index=True)
-        print(f"BSE records: {len(df_bse)}")
-        
-        # Combine NSE + BSE
-        df_all = pd.concat([df_nse, df_bse], ignore_index=True)
-        
-        # CRITICAL FIX: Deduplicate by ISIN with STRICT NSE priority
-        if "ISIN" in df_all.columns:
-            print("Deduplicating by ISIN (STRICT NSE priority)...")
-            before = len(df_all)
+# ==== LOAD BSE DATA (MERGED) ====
+bse_merged_dir = 'data/bse_merged'
+merged_bse_files = sorted(glob.glob(os.path.join(bse_merged_dir, 'bse_merged_*.csv')))
+
+bse_data = []
+if merged_bse_files:
+    print(f"Loading {len(merged_bse_files)} merged BSE delivery files with real delivery data...")
+
+    for f in merged_bse_files:
+        try:
+            df = pd.read_csv(f)
             
-            # Add sort column: NSE = 0, BSE = 1 (lower value = higher priority)
-            df_all["EXCH_PRIORITY"] = df_all["EXCHANGE"].apply(lambda x: 0 if x == "NSE" else 1)
+            # Rename BSE columns to match NSE format
+            df = df.rename(columns={
+                "TckrSymb": "SYMBOL",
+                "BizDt": "DATE",
+                "ClsPric": "CLOSE",
+                "TtlTradgVol": "TOTTRDQTY",
+                "TtlTrfVal": "TOTTRDVAL"
+            })
             
-            # Sort by ISIN, DATE, then EXCHANGE priority (NSE first)
-            df_all = df_all.sort_values(["ISIN", "DATE", "EXCH_PRIORITY"])
+            # ✅ CRITICAL FIX: Add EXCHANGE column
+            df["EXCHANGE"] = "BSE"
             
-            # Keep first occurrence (NSE) for each ISIN+DATE combination
-            df_all = df_all.drop_duplicates(subset=["ISIN", "DATE"], keep="first")
+            # Convert DATE if it exists as BizDt
+            if "DATE" in df.columns:
+                df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
             
-            # Remove temporary column
-            df_all = df_all.drop(columns=["EXCH_PRIORITY"])
+            # Convert numeric columns
+            for col in ["CLOSE", "TOTTRDQTY", "TOTTRDVAL", "DELIV_PER", "DELIV_QTY"]:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
             
-            after = len(df_all)
-            print(f"Removed {before - after} duplicates, {after} records remaining")
-            print(f"NSE records retained: {len(df_all[df_all['EXCHANGE']=='NSE'])}")
-            print(f"BSE records retained: {len(df_all[df_all['EXCHANGE']=='BSE'])}")
-    else:
-        df_all = df_nse
-        print("No BSE data found, using NSE only")
+            bse_data.append(df)
+            
+        except Exception as e:
+            print(f"Error loading {f}: {e}")
+
+    df_bse = pd.concat(bse_data, ignore_index=True)
+    print(f"✅ BSE EXCHANGE column added: {df_bse['EXCHANGE'].unique() if 'EXCHANGE' in df_bse.columns else 'MISSING!'}")
+
+# ==== COMBINE NSE + BSE ====
+df_all = pd.concat([df_nse, df_bse], ignore_index=True)
+
+# CRITICAL FIX: Deduplicate by ISIN with STRICT NSE priority
+if "ISIN" in df_all.columns:
+    print("Deduplicating by ISIN (STRICT NSE priority)...")
+    before = len(df_all)
+
+    df_all["EXCH_PRIORITY"] = df_all["EXCHANGE"].apply(lambda x: 0 if x == "NSE" else 1)
+    df_all = df_all.sort_values(["ISIN", "DATE", "EXCH_PRIORITY"])
+    df_all = df_all.drop_duplicates(subset=["ISIN", "DATE"], keep="first")
+    df_all = df_all.drop(columns=["EXCH_PRIORITY"])
+
+    after = len(df_all)
+    print(f"Removed {before - after} duplicates, {after} records remaining")
+    print(f"NSE records retained: {len(df_all[df_all['EXCHANGE']=='NSE'])}")
+    print(f"BSE records retained: {len(df_all[df_all['EXCHANGE']=='BSE'])}")
 else:
-    df_all = df_nse
-    print("BSE directory not found, using NSE only")
+    print("No ISIN column, skipping deduplication")
+
+# Fix missing columns before usage
+if "DELIVERY_TURNOVER" not in df_all.columns:
+    df_all["DELIVERY_TURNOVER"] = df_all["TOTTRDQTY"] * df_all["CLOSE"]
+
+if "ATW" not in df_all.columns:
+    df_all["ATW"] = df_all["TOTTRDVAL"] / 1000
 
 latest_date = df_all["DATE"].max()
 
-# ===== LOAD DELIVERY DATA (NSE ONLY) =====
-print("Loading delivery data...")
+# ==== LOAD NSE DELIVERY DATA ====
+print("Loading NSE delivery data...")
 delivery_files = sorted([f for f in os.listdir(nse_raw_dir) if f.startswith("nse_delivery_")])
 all_delivery = []
 
@@ -182,20 +180,25 @@ for f in delivery_files:
     date_str = f.replace("nse_delivery_", "").replace(".csv", "")
     date = datetime.strptime(date_str, '%Y%m%d')
     df_d = pd.read_csv(os.path.join(nse_raw_dir, f))
-    
     if " SYMBOL" in df_d.columns:
         df_d = df_d.rename(columns={" SYMBOL": "SYMBOL", " DELIV_PER": "DELIV_PER"})
-    
+    if "DELIV_PER" not in df_d.columns:
+        df_d["DELIV_PER"] = pd.NA
     df_d["DATE"] = date
     all_delivery.append(df_d)
 
 if len(all_delivery) > 0:
     df_delivery_all = pd.concat(all_delivery, ignore_index=True)
-    df_all = df_all.merge(df_delivery_all[["SYMBOL", "DATE", "DELIV_PER"]], 
-                          on=["SYMBOL", "DATE"], how="left")
-    df_all["DELIV_PER"] = pd.to_numeric(df_all["DELIV_PER"], errors='coerce').fillna(60)
+    df_all = df_all.merge(df_delivery_all[["SYMBOL", "DATE", "DELIV_PER"]],
+                          on=["SYMBOL", "DATE"], how="left", suffixes=('', '_nse'))
+    # Combine delivery percent columns safely
+    if 'DELIV_PER' in df_all.columns and 'DELIV_PER_nse' in df_all.columns:
+        df_all['DELIV_PER'] = df_all['DELIV_PER'].combine_first(df_all['DELIV_PER_nse'])
+        df_all.drop(columns=['DELIV_PER_nse'], inplace=True)
 else:
     df_all["DELIV_PER"] = 60
+
+df_all["DELIV_PER"] = pd.to_numeric(df_all["DELIV_PER"], errors='coerce').fillna(60)
 
 # ===== CALCULATE METRICS =====
 df_all["CLOSE"] = pd.to_numeric(df_all["CLOSE"], errors='coerce').fillna(0)
@@ -203,14 +206,23 @@ df_all["TOTTRDQTY"] = pd.to_numeric(df_all["TOTTRDQTY"], errors='coerce').fillna
 df_all["TOTTRDVAL"] = pd.to_numeric(df_all["TOTTRDVAL"], errors='coerce').fillna(0)
 df_all["DELIVERY_TURNOVER"] = df_all["TOTTRDQTY"] * df_all["CLOSE"]
 df_all["ATW"] = df_all["TOTTRDVAL"] / 1000
-
 # ===== FILTERS =====
+print(f"Before SERIES filter: Total={len(df_all)}, BSE={len(df_all[df_all['EXCHANGE']=='BSE'])}")
+
 if "SERIES" in df_all.columns:
-    df_all = df_all[(df_all["SERIES"] == "EQ") | (df_all["EXCHANGE"] == "BSE")].copy()
+    # For NSE: keep only EQ series
+    # For BSE: keep all (BSE doesn't use SERIES column the same way)
+    df_all = df_all[
+        ((df_all["EXCHANGE"] == "NSE") & (df_all["SERIES"] == "EQ")) |
+        (df_all["EXCHANGE"] == "BSE")
+    ].copy()
 
-df_all = df_all[~df_all["SYMBOL"].str.contains("ETF|LIQUID|FUND|INDEX|NIFTY|SENSEX|GLOBE", 
-                                                case=False, na=False)].copy()
+print(f"After SERIES filter: Total={len(df_all)}, BSE={len(df_all[df_all['EXCHANGE']=='BSE'])}")
 
+# Symbol exclusion filter
+df_all = df_all[~df_all["SYMBOL"].str.contains("ETF|LIQUID|FUND|INDEX|NIFTY|SENSEX|GLOBE", case=False, na=False)].copy()
+
+print(f"After SYMBOL filter: Total={len(df_all)}, BSE={len(df_all[df_all['EXCHANGE']=='BSE'])}")
 # ===== CALCULATE PROGRESSIVE AVERAGES =====
 print("Calculating progressive averages...")
 symbols = df_all["SYMBOL"].unique()
@@ -218,14 +230,16 @@ results = []
 
 for symbol in symbols:
     df_stock = df_all[df_all["SYMBOL"] == symbol].sort_values("DATE")
-    latest = df_stock[df_stock["DATE"] == latest_date]
     
-    if len(latest) == 0:
+    # Use each stock's own latest date instead of global latest_date
+    if len(df_stock) == 0:
         continue
     
-    latest = latest.iloc[0]
-    df_hist = df_stock[df_stock["DATE"] < latest_date].sort_values("DATE", ascending=False)
+    latest = df_stock.iloc[-1]  # Most recent row for this stock
+    stock_latest_date = latest["DATE"]
     
+    # Get historical data (everything before the latest date for this stock)
+    df_hist = df_stock[df_stock["DATE"] < stock_latest_date].sort_values("DATE", ascending=False)
     df_1w = df_hist.head(5)
     df_1m = df_hist.head(22)
     df_3m = df_hist.head(66)
@@ -248,12 +262,17 @@ for symbol in symbols:
         "ATW_3M": df_3m["ATW"].mean() if len(df_3m) > 0 else latest["ATW"],
     })
 
+print(f"Processed {len(results)} stocks successfully")
+
 df_final = pd.DataFrame(results)
 df_final.to_csv(Config.COMBINED_FILE, index=False)
 
-print(f"\n✅ SUCCESS!")
+print("\n✅ SUCCESS!")
 print(f"   Total Stocks: {len(df_final)} (NSE + BSE deduplicated)")
-print(f"   NSE Stocks: {len(df_final[df_final['EXCHANGE']=='NSE'])}")
-print(f"   BSE Stocks: {len(df_final[df_final['EXCHANGE']=='BSE'])}")
+print(f"   NSE Stocks: {len(df_final[df_final['EXCHANGE'] == 'NSE'])}")
+print(f"   BSE Stocks: {len(df_final[df_final['EXCHANGE'] == 'BSE'])}")
 print(f"   Latest Date: {latest_date.strftime('%d %b %Y')}")
 print("=" * 70)
+
+import sys
+sys.exit(0)  # success

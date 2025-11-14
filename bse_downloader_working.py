@@ -17,18 +17,20 @@ class BSEDownloaderWorking:
         })
     
     def download_bse_bhav_new_format(self, date):
-        """BSE New Format: BhavCopy_BSE_CM_0_0_0_YYYYMMDD_F_0000.CSV"""
         date_str = date.strftime('%Y%m%d')
         url = f"https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{date_str}_F_0000.CSV"
-        
+    
         try:
             r = self.session.get(url, timeout=30, verify=False)
             if r.status_code == 200:
                 df = pd.read_csv(io.StringIO(r.text))
                 return df, True
-        except:
+        except Exception as e:
+            # Handle exception or log error
             pass
         return None, False
+
+
     
     def download_bse_delivery_zip(self, date):
         """BSE Delivery ZIP: SCBSEALLDDMM.zip"""
