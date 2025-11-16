@@ -22,3 +22,14 @@ Thumbs.db
 .vscode/
 .idea/
 data/*backup*.csv 
+
+# Daily BSE delivery CSVs (derived, can be regenerated)
+data/bse_delivery_*.csv
+
+# Live dashboard export (can be regenerated)
+data/combined_dashboard_live.csv
+
+# Diagnostic junk
+diagnostic*.txt
+
+group_a[*

@@ -43,26 +43,20 @@ st.markdown('''<style>
 
 def log_signal_to_history(symbol, exchange, close, deliv_per, momentum_score):
     """Automatically log signal to history file"""
-    import os
-    from datetime import datetime
-    
     history_file = "data/signal_history.csv"
     today = datetime.now().strftime("%Y-%m-%d")
     
-    # Create file if doesn't exist
     if not os.path.exists(history_file):
         with open(history_file, 'w') as f:
             f.write("Date,Symbol,Exchange,Price,Delivery_Percent,Momentum_Score\n")
     
-    # Check if already logged today
     try:
         df_history = pd.read_csv(history_file)
         if ((df_history["Date"] == today) & (df_history["Symbol"] == symbol)).any():
-            return  # Already logged
+            return
     except:
         df_history = pd.DataFrame()
     
-    # Append new signal
     with open(history_file, 'a') as f:
         f.write(f"{today},{symbol},{exchange},{close},{deliv_per:.2f},{momentum_score:.1f}\n")
 
@@ -78,19 +72,35 @@ if page == "Dashboard":
     
     try:
         from progressive_screener import ProgressiveSpiker
-        if os.path.exists(Config.COMBINED_FILE):
-            df = pd.read_csv(Config.COMBINED_FILE)
+        LIVE_FILE = "data/combined_dashboard_live.csv"
+        
+        if os.path.exists(LIVE_FILE):
+            df = pd.read_csv(LIVE_FILE)
+            
+            # Validate DATE column
+            if "DATE" not in df.columns or df["DATE"].isna().all():
+                st.error("⚠️ DATE column missing - run auto_update_smart.py")
+                st.stop()
+            
+            df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+            latest_date = df["DATE"].max()
+            
+            # Exchange split
+            exch_counts = df["EXCHANGE"].value_counts()
+            nse_count = exch_counts.get("NSE", 0)
+            bse_count = exch_counts.get("BSE", 0)
+            
             c1, c2, c3, c4 = st.columns(4)
-            with c1: metric("Total Records", len(df))
-            with c2: metric("Unique Stocks", df["SYMBOL"].nunique() if "SYMBOL" in df.columns else 0)
-            with c3: metric("Last Updated", datetime.now().strftime("%d %b"))
-            with c4: metric("Data Columns", len(df.columns))
+            with c1: metric("Total Stocks", f"{len(df):,}")
+            with c2: metric("NSE Stocks", f"{nse_count:,}")
+            with c3: metric("BSE Stocks", f"{bse_count:,}")
+            with c4: metric("Data as of", latest_date.strftime("%d %b %Y"))
             
             st.markdown("<div class='section'>12-Condition Signals</div>", unsafe_allow_html=True)
             sig = ProgressiveSpiker(df).get_signals()
             if len(sig) > 0:
                 st.success(f"✅ Found {len(sig)} signals passing all 12 conditions")
-                cols = [c for c in ["SYMBOL","CLOSE","DELIV_PER","DELIVERY_TURNOVER","ATW"] if c in sig.columns]
+                cols = [c for c in ["SYMBOL","EXCHANGE","CLOSE","DELIV_PER","DELIVERY_TURNOVER","ATW"] if c in sig.columns]
                 st.dataframe(sig[cols].head(30), use_container_width=True, height=500)
                 
                 st.markdown("<div class='subsection'>Add Signal to Watchlist</div>", unsafe_allow_html=True)
@@ -113,9 +123,10 @@ if page == "Dashboard":
             else:
                 st.info("📭 No signals found")
         else:
-            st.warning("⚠️ No data file. Go to Data Health → Download tab")
+            st.warning("⚠️ No data file. Run auto_update_smart.py first")
     except Exception as e:
         st.error(f"Error: {e}")
+
 # DATA HEALTH
 elif page == "Data Health":
     st.markdown("<div class='section'>Data Health & Download</div>", unsafe_allow_html=True)
@@ -156,8 +167,10 @@ elif page == "Data Health":
     
     with tabs[1]:
         st.markdown("<div class='subsection'>Primary Combined File</div>", unsafe_allow_html=True)
-        if os.path.exists(Config.COMBINED_FILE):
-            df = pd.read_csv(Config.COMBINED_FILE)
+        LIVE_FILE = "data/combined_dashboard_live.csv"
+
+        if os.path.exists(LIVE_FILE):
+            df = pd.read_csv(LIVE_FILE)
             
             if "DATE" in df.columns:
                 df["DATE"] = pd.to_datetime(df["DATE"], errors='coerce')
@@ -165,26 +178,17 @@ elif page == "Data Health":
                 oldest_date = df["DATE"].min()
                 date_info = f"{oldest_date.strftime('%d %b %Y')} to {latest_date.strftime('%d %b %Y')}"
             else:
-                from datetime import datetime
-                nse_raw_dir = Config.NSE_RAW_DIR
-                if os.path.exists(nse_raw_dir):
-                    bhav_files = sorted([f for f in os.listdir(nse_raw_dir) if f.startswith("nse_bhav_")])
-                    if len(bhav_files) > 0:
-                        oldest_file = bhav_files[0].replace("nse_bhav_", "").replace(".csv", "")
-                        latest_file = bhav_files[-1].replace("nse_bhav_", "").replace(".csv", "")
-                        oldest_date = datetime.strptime(oldest_file, '%Y%m%d')
-                        latest_date = datetime.strptime(latest_file, '%Y%m%d')
-                        date_info = f"{oldest_date.strftime('%d %b %Y')} to {latest_date.strftime('%d %b %Y')}"
-                    else:
-                        date_info = "11 Nov 2025"
-                else:
-                    date_info = "11 Nov 2025"
+                date_info = "Unknown"
+            
+            exch_counts = df["EXCHANGE"].value_counts() if "EXCHANGE" in df.columns else {}
+            nse_count = exch_counts.get("NSE", 0)
+            bse_count = exch_counts.get("BSE", 0)
             
             c1, c2, c3, c4 = st.columns(4)
-            with c1: metric("Total Rows", f"{len(df):,}")
-            with c2: metric("Symbols", f"{df['SYMBOL'].nunique() if 'SYMBOL' in df.columns else 0:,}")
-            with c3: metric("Date Range", date_info)
-            with c4: metric("File Size", f"{os.path.getsize(Config.COMBINED_FILE)/(1024*1024):.1f} MB")
+            with c1: metric("Total Stocks", f"{len(df):,}")
+            with c2: metric("NSE", f"{nse_count:,}")
+            with c3: metric("BSE", f"{bse_count:,}")
+            with c4: metric("Date Range", date_info)
             
             st.dataframe(df.head(30), use_container_width=True)
         else:
@@ -257,43 +261,38 @@ elif page == "Data Health":
 elif page == "Signals":
     st.markdown("<div class='section'>12-Condition Signals</div>", unsafe_allow_html=True)
     
-    if os.path.exists(Config.COMBINED_FILE):
-        df = pd.read_csv(Config.COMBINED_FILE)
+    LIVE_FILE = "data/combined_dashboard_live.csv"
+
+    if os.path.exists(LIVE_FILE):
+        df = pd.read_csv(LIVE_FILE)
         
-        # Show overview
+        # Validate DATE
+        if "DATE" not in df.columns or df["DATE"].isna().all():
+            st.error("⚠️ DATE column missing - run auto_update_smart.py")
+            st.stop()
+        
+        df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+        latest_date = df["DATE"].max()
+        
+        # Exchange split
+        exch_counts = df["EXCHANGE"].value_counts()
+        nse_count = exch_counts.get("NSE", 0)
+        bse_count = exch_counts.get("BSE", 0)
+        
         c1, c2, c3, c4 = st.columns(4)
-        with c1: metric("Total Rows", f"{len(df):,}")
-        with c2: metric("Unique Stocks", f"{df['SYMBOL'].nunique():,}")
-        with c3: metric("Last Updated", datetime.now().strftime("%d %b"))
-        with c4: metric("Data Columns", len(df.columns))
+        with c1: metric("Total Stocks", f"{len(df):,}")
+        with c2: metric("NSE", f"{nse_count:,}")
+        with c3: metric("BSE", f"{bse_count:,}")
+        with c4: metric("Data as of", latest_date.strftime("%d %b %Y"))
         
         st.markdown("<div class='subsection'>12-Condition Signals</div>", unsafe_allow_html=True)
         
-        # Apply 12 conditions
-        signals = df.copy()
+        # Use ProgressiveSpiker instead of duplicate logic
+        from progressive_screener import ProgressiveSpiker
+        signals = ProgressiveSpiker(df).get_signals()
         
-        # Baseline (3 conditions)
-        signals = signals[signals["DELIV_PER"] >= 50]
-        signals = signals[signals["DELIVERY_TURNOVER"] >= 5000000]
-        signals = signals[signals["ATW"] >= 20000]
-        
-        # Progressive Delivery % (3 conditions)
-        signals = signals[(signals["DELIV_PER"] > signals["DELIV_PER_1W"]) & 
-                         (signals["DELIV_PER_1W"] > signals["DELIV_PER_1M"]) & 
-                         (signals["DELIV_PER_1M"] > signals["DELIV_PER_3M"])]
-        
-        # Progressive Turnover (3 conditions)
-        signals = signals[(signals["DELIVERY_TURNOVER"] > signals["DELIVERY_TURNOVER_1W"]) & 
-                         (signals["DELIVERY_TURNOVER_1W"] > signals["DELIVERY_TURNOVER_1M"]) & 
-                         (signals["DELIVERY_TURNOVER_1M"] > signals["DELIVERY_TURNOVER_3M"])]
-        
-        # Progressive ATW (3 conditions)
-        signals = signals[(signals["ATW"] > signals["ATW_1W"]) & 
-                         (signals["ATW_1W"] > signals["ATW_1M"]) & 
-                         (signals["ATW_1M"] > signals["ATW_3M"])]
-        
-        # Calculate Momentum Score
         if len(signals) > 0:
+            # Calculate Momentum Score
             deliv_momentum = ((signals["DELIV_PER"] - signals["DELIV_PER_1W"]) / signals["DELIV_PER_1W"] * 100).clip(0, 33)
             turnover_momentum = ((signals["DELIVERY_TURNOVER"] - signals["DELIVERY_TURNOVER_1W"]) / signals["DELIVERY_TURNOVER_1W"] * 100).clip(0, 33)
             atw_momentum = ((signals["ATW"] - signals["ATW_1W"]) / signals["ATW_1W"] * 100).clip(0, 34)
@@ -356,8 +355,10 @@ elif page == "Verify Conditions":
     
     try:
         from progressive_screener import ProgressiveSpiker
-        if os.path.exists(Config.COMBINED_FILE):
-            df = pd.read_csv(Config.COMBINED_FILE)
+        LIVE_FILE = "data/combined_dashboard_live.csv"
+
+        if os.path.exists(LIVE_FILE):
+            df = pd.read_csv(LIVE_FILE)
             sig = ProgressiveSpiker(df).get_signals()
             if len(sig) > 0:
                 st.success(f"Found {len(sig)} signals - Checking first 5...")
@@ -394,8 +395,10 @@ elif page == "Watchlist":
         
         if len(wm.active) > 0:
             # Update prices first
-            if os.path.exists(Config.COMBINED_FILE):
-                df = pd.read_csv(Config.COMBINED_FILE)
+            LIVE_FILE = "data/combined_dashboard_live.csv"
+
+            if os.path.exists(LIVE_FILE):
+                df = pd.read_csv(LIVE_FILE)
                 wm.auto_update_prices(df)
                 wm = WatchlistManager()  # Reload after update
             
@@ -468,7 +471,7 @@ elif page == "Watchlist":
             
             # Show summary
             st.markdown("<div class='subsection'>Quick Stats</div>", unsafe_allow_html=True)
-            total_value = (wm.active["current_price"] * 100).sum()  # Assuming 100 shares each
+            total_value = (wm.active["current_price"] * 100).sum()
             total_pl = ((wm.active["current_price"] - wm.active["entry_price"]) * 100).sum()
             
             col1, col2, col3 = st.columns(3)
