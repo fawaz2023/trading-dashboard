@@ -72,7 +72,8 @@ if page == "Dashboard":
     
     try:
         from progressive_screener import ProgressiveSpiker
-        LIVE_FILE = "data/combined_dashboard_live.csv"
+        LIVE_FILE = "data/dashboard_cloud.csv"
+
         
         if os.path.exists(LIVE_FILE):
             df = pd.read_csv(LIVE_FILE)
