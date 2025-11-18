@@ -168,7 +168,8 @@ elif page == "Data Health":
     
     with tabs[1]:
         st.markdown("<div class='subsection'>Primary Combined File</div>", unsafe_allow_html=True)
-        LIVE_FILE = "data/combined_dashboard_live.csv"
+        LIVE_FILE = "data/dashboard_cloud.csv"
+
 
         if os.path.exists(LIVE_FILE):
             df = pd.read_csv(LIVE_FILE)
@@ -262,7 +263,8 @@ elif page == "Data Health":
 elif page == "Signals":
     st.markdown("<div class='section'>12-Condition Signals</div>", unsafe_allow_html=True)
     
-    LIVE_FILE = "data/combined_dashboard_live.csv"
+    LIVE_FILE = "data/dashboard_cloud.csv"
+
 
     if os.path.exists(LIVE_FILE):
         df = pd.read_csv(LIVE_FILE)
@@ -356,7 +358,8 @@ elif page == "Verify Conditions":
     
     try:
         from progressive_screener import ProgressiveSpiker
-        LIVE_FILE = "data/combined_dashboard_live.csv"
+        LIVE_FILE = "data/dashboard_cloud.csv"
+
 
         if os.path.exists(LIVE_FILE):
             df = pd.read_csv(LIVE_FILE)
@@ -396,7 +399,8 @@ elif page == "Watchlist":
         
         if len(wm.active) > 0:
             # Update prices first
-            LIVE_FILE = "data/combined_dashboard_live.csv"
+            LIVE_FILE = "data/dashboard_cloud.csv"
+
 
             if os.path.exists(LIVE_FILE):
                 df = pd.read_csv(LIVE_FILE)
