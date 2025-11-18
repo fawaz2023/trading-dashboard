@@ -48,7 +48,10 @@ set csv_changed=%errorlevel%
 git diff --quiet data/signal_history.csv
 set signal_changed=%errorlevel%
 
-if %csv_changed%==0 if %signal_changed%==0 (
+git diff --quiet data/dashboard_cloud.csv
+set cloud_changed=%errorlevel%
+
+if %csv_changed%==0 if %signal_changed%==0 if %cloud_changed%==0 (
     echo.
     echo ======================================================================
     echo ℹ️  NO CHANGES DETECTED
