@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 REM ======================================================================
-REM SMART AUTO-UPDATE AND PUSH TO GITHUB
+REM SMART AUTO-UPDATE AND PUSH TO GITHUB WITH EMAIL ALERT ON ERROR
 REM Only pushes if download succeeds and changes are detected
 REM ======================================================================
 
@@ -116,14 +116,17 @@ echo ✅ SUCCESS! DASHBOARD UPDATED
 echo ======================================================================
 echo Commit: %commit_msg%
 echo Status: Pushed to GitHub successfully
-echo URL:    https://github.com/fawaz2023/trading-dashboard
+echo URL:    [https://github.com/fawaz2023/trading-dashboard](https://github.com/fawaz2023/trading-dashboard)
 echo.
 echo Your Streamlit dashboard will refresh in 2-3 minutes
 echo ======================================================================
 goto :end_success
 
-REM ===== ERROR HANDLER =====
+REM ===== ERROR HANDLER WITH EMAIL ALERT =====
 :error
+echo.
+echo Sending error notification email...
+python send_error_email.py
 echo.
 echo End Time: %date% %time%
 echo ======================================================================
