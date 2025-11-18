@@ -510,8 +510,7 @@ if "SYMBOL" in df_all.columns:
     after = len(df_all)
     print(f"Excluded generic ETFs/FUNDS/INDEX: {before} -> {after}")
 
-# Explicitly drop known bond / NCD type BSE instruments that have 0 delivery
-# These are the 14 rows we saw with DELIVERY_TURNOVER = 0 and DELIV_PER = 0
+# Explicitly drop known bond / NCD type BSE instruments
 bad_isins = [
     "INE148I07PY7", "INE1O3X15025", "INE296G07200", "INE296G07226",
     "INE306N08342", "INE443L08172", "INE501X07554", "INE501X08081",
@@ -524,6 +523,13 @@ if "ISIN" in df_all.columns:
     df_all = df_all[~df_all["ISIN"].isin(bad_isins)].copy()
     after = len(df_all)
     print(f"Excluded 14 bond/NCD ISINs: {before} -> {after}")
+
+# ===== EXCLUDE GOVERNMENT SECURITIES (GS) - NEW =====
+if "SYMBOL" in df_all.columns:
+    before = len(df_all)
+    df_all = df_all[~df_all["SYMBOL"].str.contains(r'GS\d+', regex=True, na=False)].copy()
+    after = len(df_all)
+    print(f"Excluded Government Securities (GS bonds): {before} -> {after}")
 
 # ===== CALCULATE PROGRESSIVE AVERAGES =====
 print("\n📈 Calculating progressive averages...")
