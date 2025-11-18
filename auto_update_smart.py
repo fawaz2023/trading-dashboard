@@ -20,6 +20,90 @@ holidays = [
     "2025-11-01", "2025-11-05", "2025-12-25"
 ]
 
+# ================================================================
+# BACKFILL MISSING DATES (NEW)
+# ================================================================
+
+def get_missing_trading_dates(days_to_check=10):
+    """Check which trading dates are missing from data/nse_raw/"""
+    today = datetime.now()
+    missing_dates = []
+    
+    for i in range(days_to_check, 0, -1):
+        check_date = today - timedelta(days=i)
+        
+        # Skip weekends
+        if check_date.weekday() >= 5:
+            continue
+        
+        # Skip holidays
+        date_str_dash = check_date.strftime("%Y-%m-%d")
+        if date_str_dash in holidays:
+            continue
+        
+        # Check if NSE bhav file exists
+        date_str = check_date.strftime("%Y%m%d")
+        pattern = f"data/nse_raw/nse_bhav_{date_str}.csv"
+        
+        if not glob.glob(pattern):
+            missing_dates.append(check_date)
+    
+    return missing_dates
+
+def backfill_missing_dates(missing_dates):
+    """Download NSE + BSE data for all missing dates"""
+    if not missing_dates:
+        print("✅ No missing dates. Data is up to date.\n")
+        return
+    
+    print(f"\n{'='*70}")
+    print(f"⚠️  MISSING DATA DETECTED")
+    print(f"{'='*70}")
+    print(f"Found {len(missing_dates)} missing trading dates:")
+    for date in missing_dates:
+        print(f"   📅 {date.strftime('%Y-%m-%d (%A)')}")
+    print(f"{'='*70}\n")
+    
+    print("📥 Starting backfill download...\n")
+    
+    for date_obj in missing_dates:
+        date_str = date_obj.strftime("%Y%m%d")
+        print(f"🔄 Downloading: {date_obj.strftime('%Y-%m-%d')}")
+        
+        try:
+            # Download NSE
+            nse_downloader = NSEDownloaderFixed()
+            nse_downloader.download_data_for_date(date_obj)
+            
+            # Download BSE
+            bse_downloader = BSEDownloaderWorking()
+            bse_downloader.download_bhav_for_date(date_obj)
+            
+            print(f"   ✅ NSE + BSE downloaded")
+            
+        except Exception as e:
+            print(f"   ⚠️  Error: {e}")
+            continue
+        
+        print()
+    
+    print(f"{'='*70}")
+    print("✅ BACKFILL COMPLETE")
+    print(f"{'='*70}\n")
+
+# Run backfill check
+print(f"{'='*70}")
+print("🔍 CHECKING FOR MISSING DATES...")
+print(f"{'='*70}")
+
+missing_dates = get_missing_trading_dates(days_to_check=10)
+backfill_missing_dates(missing_dates)
+
+print(f"{'='*70}")
+print("▶️  PROCEEDING WITH MAIN UPDATE")
+print(f"{'='*70}\n")
+
+
 # -------------------------------
 # Helpers
 # -------------------------------
@@ -501,6 +585,10 @@ os.makedirs(os.path.dirname(Config.COMBINED_FILE), exist_ok=True)
 dashboard_file = "data/combined_dashboard_live.csv"
 df_final.to_csv(dashboard_file, index=False)
 df_final.to_csv(Config.COMBINED_FILE, index=False)
+
+import shutil
+shutil.copy("data/combined_dashboard_live.csv", "data/dashboard_cloud.csv")
+
 
 print("\n" + "="*70)
 print("✅ SUCCESS!")
