@@ -19,35 +19,30 @@ holidays = [
     "2025-05-01", "2025-08-15", "2025-10-02", "2025-10-22",
     "2025-11-01", "2025-11-05", "2025-12-25"
 ]
-
 # ================================================================
-# BACKFILL MISSING DATES (NEW)
+# BACKFILL MISSING DATES (IMPROVED - NOW CHECKS BSE DELIVERY TOO)
 # ================================================================
-
 def get_missing_trading_dates(days_to_check=10):
-    """Check which trading dates are missing from data/nse_raw/"""
+    """Check which trading dates are missing from NSE bhav OR BSE delivery"""
     today = datetime.now()
     missing_dates = []
-    
     for i in range(days_to_check, 0, -1):
         check_date = today - timedelta(days=i)
-        
         # Skip weekends
         if check_date.weekday() >= 5:
             continue
-        
         # Skip holidays
         date_str_dash = check_date.strftime("%Y-%m-%d")
         if date_str_dash in holidays:
             continue
-        
-        # Check if NSE bhav file exists
+        # Check if NSE bhav OR BSE delivery is missing
         date_str = check_date.strftime("%Y%m%d")
-        pattern = f"data/nse_raw/nse_bhav_{date_str}.csv"
-        
-        if not glob.glob(pattern):
+        nse_pattern = f"data/nse_raw/nse_bhav_{date_str}.csv"
+        bse_deliv_pattern = f"data/bse_delivery_{date_str}.csv"
+        nse_missing = not glob.glob(nse_pattern)
+        bse_deliv_missing = not glob.glob(bse_deliv_pattern)
+        if nse_missing or bse_deliv_missing:
             missing_dates.append(check_date)
-    
     return missing_dates
 
 def backfill_missing_dates(missing_dates):
@@ -55,7 +50,7 @@ def backfill_missing_dates(missing_dates):
     if not missing_dates:
         print("✅ No missing dates. Data is up to date.\n")
         return
-    
+
     print(f"\n{'='*70}")
     print(f"⚠️  MISSING DATA DETECTED")
     print(f"{'='*70}")
@@ -63,45 +58,39 @@ def backfill_missing_dates(missing_dates):
     for date in missing_dates:
         print(f"   📅 {date.strftime('%Y-%m-%d (%A)')}")
     print(f"{'='*70}\n")
-    
     print("📥 Starting backfill download...\n")
-    
+
     for date_obj in missing_dates:
         date_str = date_obj.strftime("%Y%m%d")
         print(f"🔄 Downloading: {date_obj.strftime('%Y-%m-%d')}")
-        
         try:
-            # Download NSE
+            # Download NSE Bhavcopy and Delivery using correct methods
             nse_downloader = NSEDownloaderFixed()
-            nse_downloader.download_data_for_date(date_obj)
-            
-            # Download BSE
+            nse_downloader.download_nse_bhav_new_format(date_obj)
+            nse_downloader.download_nse_delivery(date_obj)
+
+            # Download BSE Bhavcopy using your existing code/method
             bse_downloader = BSEDownloaderWorking()
             bse_downloader.download_bhav_for_date(date_obj)
-            
-            print(f"   ✅ NSE + BSE downloaded")
-            
+            # (If you need BSE delivery, call its code here too)
+
+            print(f"   ✅ NSE + BSE + Delivery downloaded")
         except Exception as e:
             print(f"   ⚠️  Error: {e}")
             continue
-        
-        print()
-    
+
+    print()
     print(f"{'='*70}")
     print("✅ BACKFILL COMPLETE")
     print(f"{'='*70}\n")
 
-# Run backfill check
+# Run backfill check and download loop
 print(f"{'='*70}")
 print("🔍 CHECKING FOR MISSING DATES...")
 print(f"{'='*70}")
 
 missing_dates = get_missing_trading_dates(days_to_check=10)
 backfill_missing_dates(missing_dates)
-
-print(f"{'='*70}")
-print("▶️  PROCEEDING WITH MAIN UPDATE")
-print(f"{'='*70}\n")
 
 
 # -------------------------------
@@ -169,20 +158,28 @@ def detect_bse_delivery_key(df_deliv):
     return None
 
 def normalize_bse_delivery(df_deliv):
-    # standardize column labels
+    """Standardize BSE delivery column names"""
+    
+    # Map various BSE delivery formats to standard names
     ren = {
+        "SCRIP CODE": "SYMBOL",           # Nov 2025 format
+        "SECURITY_CODE": "SYMBOL",
+        "SCRIP_CODE": "SYMBOL",
+        "DELV. PER.": "DELIV_PER",       # Nov 2025 format
         "DELIV. PER.": "DELIV_PER",
-        "DELIVERY QTY": "DELIV_QTY",
+        "DELIVERY QTY": "DELIV_QTY",      # Nov 2025 format
         "DELIV ": "DELIV_QTY",
         " DELIV_QTY": "DELIV_QTY",
         " DELIV_PER": "DELIV_PER",
     }
+    
     df_deliv.rename(columns=ren, inplace=True)
-    df_deliv = ensure_cols(df_deliv, {"DELIV_PER": 0, "DELIV_QTY": 0})
+    df_deliv = ensure_cols(df_deliv, {"DELIV_PER": 0, "DELIV_QTY": 0, "SYMBOL": None})
+    
     df_deliv["DELIV_QTY"] = to_num(df_deliv["DELIV_QTY"]).fillna(0)
     df_deliv["DELIV_PER"] = to_num(df_deliv["DELIV_PER"]).fillna(0)
+    
     return df_deliv
-
 # -------------------------------
 # Step 0: Determine download window
 # -------------------------------
@@ -212,6 +209,8 @@ if start_date <= end_date:
     print("=" * 70)
     nse_downloader = NSEDownloaderFixed()
     bse_downloader = BSEDownloaderWorking()
+    bse_downloader.download_bse_bhav(date_obj)
+
     downloaded = 0
 
     cur = start_date
@@ -227,13 +226,21 @@ if start_date <= end_date:
         # BSE bhav
         _, ok_bse, _ = bse_downloader.download_bse_bhav(cur)
 
-        # BSE delivery zip
+        # BSE delivery zip (with browser headers to bypass 403 - fixed Nov 2025)
         bse_deliv_ok = False
         try:
             y = cur.year
             ddmm = cur.strftime("%d%m")
             url = f"https://www.bseindia.com/BSEDATA/gross/{y}/SCBSEALL{ddmm}.zip"
-            r = requests.get(url, timeout=20, verify=False)
+            
+            # Browser headers to bypass BSE's 403 blocking
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Referer': 'https://www.bseindia.com/',
+            }
+            
+            r = requests.get(url, timeout=20, verify=False, headers=headers)
             if r.status_code == 200:
                 zip_path = f"data/temp_bse_del_{ddmm}.zip"
                 with open(zip_path, "wb") as f:
@@ -244,14 +251,28 @@ if start_date <= end_date:
                 if txts:
                     out_date = cur.strftime("%Y%m%d")
                     df_bse_del = safe_read_csv(txts[0], delimiter="|", dtype=str)
+    
+                    # Normalize column names before saving
+                    ren = {
+                    "SCRIP CODE": "SYMBOL",
+                    "DELV. PER.": "DELIV_PER",
+                    "DELIVERY QTY": "DELIV_QTY",
+                    }
+                    df_bse_del.rename(columns=ren, inplace=True)
+    
+                    # Keep only needed columns
+                    cols_to_keep = [c for c in ["DATE", "SYMBOL", "DELIV_QTY", "DELIV_PER"] if c in df_bse_del.columns]
+                    if cols_to_keep:
+                       df_bse_del = df_bse_del[cols_to_keep]
+    
                     df_bse_del.to_csv(f"data/bse_delivery_{out_date}.csv", index=False)
-                    bse_deliv_ok = True
+                    bse_deliv_ok = True  
                 # cleanup
                 if os.path.exists(zip_path): os.remove(zip_path)
                 for t in txts:
                     if os.path.exists(t): os.remove(t)
         except Exception as e:
-            pass
+            print(f"\n    ⚠️  BSE delivery error: {e}")
 
         if ok_bhav:
             msg = "✅ NSE"
@@ -264,9 +285,37 @@ if start_date <= end_date:
         cur += timedelta(days=1)
 
     if downloaded > 0:
-        print(f"\nDownloaded: {downloaded} days")
+        print(f"\n{'='*70}")
+        print(f"DOWNLOAD SUMMARY")
+        print(f"{'='*70}")
+        print(f"Downloaded: {downloaded} days")
+        
+        # Validate all files exist
+        print("\n📊 Validating downloads...")
+        cur = start_date
+        while cur <= end_date:
+            if cur.weekday() >= 5 or cur.strftime("%Y-%m-%d") in holidays:
+                cur += timedelta(days=1)
+                continue
+            
+            date_str = cur.strftime("%Y%m%d")
+            nse_exists = os.path.exists(f"data/nse_raw/nse_bhav_{date_str}.csv")
+            bse_exists = os.path.exists(f"data/bse_raw/bse_bhav_{date_str}.csv")
+            bse_deliv_exists = os.path.exists(f"data/bse_delivery_{date_str}.csv")
+            
+            status = "✅" if (nse_exists and bse_deliv_exists) else "⚠️ "
+            msg = f"{status} {cur.strftime('%d %b')}: "
+            msg += f"NSE={'✓' if nse_exists else '✗'} "
+            msg += f"BSE={'✓' if bse_exists else '✗'} "
+            msg += f"Deliv={'✓' if bse_deliv_exists else '✗'}"
+            print(msg)
+            
+            cur += timedelta(days=1)
+        
+        print(f"{'='*70}\n")
 else:
     print("\n✅ Already up to date!")
+
 
 # -------------------------------
 # Step 2: Load NSE bhav
@@ -429,6 +478,7 @@ def merge_bse_day(bhav_all, deliv_all):
     out["DELIV_QTY"] = pd.to_numeric(out["DELIV_QTY"], errors="coerce").fillna(0)
 
     return out
+
 # Call the merge function before combining NSE and BSE data
 print("\n🔀 Merging BSE delivery data...")
 df_bse = merge_bse_day(df_bse, df_bse_deliv)
@@ -476,6 +526,7 @@ else:
     print(f"Count by exchange after dedup:\n{df_all['EXCHANGE'].value_counts()}")
 
 df_all.drop(columns=["EXCH_PRIORITY"], inplace=True, errors="ignore")
+
 # -------------------------------
 # Step 9: Compute metrics + filter universe
 # -------------------------------
@@ -522,15 +573,25 @@ if "ISIN" in df_all.columns:
     before = len(df_all)
     df_all = df_all[~df_all["ISIN"].isin(bad_isins)].copy()
     after = len(df_all)
-    print(f"Excluded 14 bond/NCD ISINs: {before} -> {after}")
-
-# ===== EXCLUDE GOVERNMENT SECURITIES (GS) - NEW =====
+# ===== EXCLUDE NON-EQUITY BSE INSTRUMENTS (BONDS, T-BILLS, SGBs, G-SECS) =====
 if "SYMBOL" in df_all.columns:
     before = len(df_all)
-    df_all = df_all[~df_all["SYMBOL"].str.contains(r'GS\d+', regex=True, na=False)].copy()
+    
+    bond_patterns = [
+        r'^GS\d',                           # Government Securities: GS15MAR34C
+        r'^\d{3,4}GS\d',                    # G-Secs: 723GS39P, 824GS2027
+        r'^\d{3,4}[A-Z]{2,4}\d{2,4}[A-Z]?$', # ALL bonds: 754SBI38, 781IHFCL28
+        r'^SGB',                            # Sovereign Gold Bonds
+        r'\d+TB$',                          # Treasury Bills
+        r'SDL',                             # State Development Loans
+        r'MHSDL',                           # Maharashtra SDL
+    ]
+    
+    pattern = '|'.join(bond_patterns)
+    df_all = df_all[~df_all["SYMBOL"].str.contains(pattern, regex=True, na=False, case=False)].copy()
+    
     after = len(df_all)
-    print(f"Excluded Government Securities (GS bonds): {before} -> {after}")
-
+    print(f"Excluded bonds, T-bills, SGBs, and G-Secs: {before} -> {after}")
 # ===== CALCULATE PROGRESSIVE AVERAGES =====
 print("\n📈 Calculating progressive averages...")
 
@@ -584,6 +645,7 @@ for symbol in symbols:
         print(f"Processed {processed}/{len(symbols)} stocks...")
 
 df_final = pd.DataFrame(results)
+
 # -------------------------------
 # Step 11: Save outputs
 # -------------------------------

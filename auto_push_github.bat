@@ -24,7 +24,7 @@ REM Check if download was successful (errorlevel 0 = success)
 if errorlevel 1 (
     echo.
     echo ======================================================================
-    echo ❌ ERROR: Download failed!
+    echo ERROR: Download failed!
     echo ======================================================================
     echo Reason: auto_update_smart.py returned error code
     echo Action: Skipping GitHub push to avoid pushing incomplete data
@@ -34,27 +34,21 @@ if errorlevel 1 (
 )
 
 echo.
-echo ✅ Download successful!
+echo Download successful!
 echo.
 
 REM ===== STEP 2: Check if files actually changed =====
 echo [2/4] Checking for file changes...
 echo ----------------------------------------------------------------------
 
-REM Get git status and check if there are changes
-git diff --quiet data/combined_2years.csv
-set csv_changed=%errorlevel%
+REM Check git status for ANY changes (staged or unstaged)
+git status --porcelain | findstr /C:"data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv data/combined_dashboard_live.csv auto_update_smart.py" >nul
+set files_changed=%errorlevel%
 
-git diff --quiet data/signal_history.csv
-set signal_changed=%errorlevel%
-
-git diff --quiet data/dashboard_cloud.csv
-set cloud_changed=%errorlevel%
-
-if %csv_changed%==0 if %signal_changed%==0 if %cloud_changed%==0 (
+if %files_changed% NEQ 0 (
     echo.
     echo ======================================================================
-    echo ℹ️  NO CHANGES DETECTED
+    echo NO CHANGES DETECTED
     echo ======================================================================
     echo Reason: Data files are identical to last commit
     echo Action: Skipping GitHub push (nothing to update)
@@ -63,20 +57,20 @@ if %csv_changed%==0 if %signal_changed%==0 if %cloud_changed%==0 (
     goto :end_success
 )
 
-echo ✅ Changes detected! Preparing to push...
+echo Changes detected! Preparing to push...
 echo.
 
 REM ===== STEP 3: Add files to Git =====
 echo [3/4] Staging changed files...
 echo ----------------------------------------------------------------------
-git add data/combined_2years.csv data/signal_history.csv
+git add data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv data/combined_dashboard_live.csv auto_update_smart.py auto_push_github.bat
 
 if errorlevel 1 (
-    echo ❌ ERROR: Failed to stage files
+    echo ERROR: Failed to stage files
     goto :error
 )
 
-echo ✅ Files staged
+echo Files staged
 echo.
 
 REM ===== STEP 4: Commit and Push to GitHub =====
@@ -88,11 +82,11 @@ set commit_msg=Auto-update: %date% %time%
 git commit -m "%commit_msg%"
 
 if errorlevel 1 (
-    echo ❌ ERROR: Failed to commit changes
+    echo ERROR: Failed to commit changes
     goto :error
 )
 
-echo ✅ Committed locally
+echo Committed locally
 echo.
 echo Pushing to GitHub...
 
@@ -101,7 +95,7 @@ git push origin main
 if errorlevel 1 (
     echo.
     echo ======================================================================
-    echo ❌ ERROR: GitHub push failed!
+    echo ERROR: GitHub push failed!
     echo ======================================================================
     echo Possible reasons:
     echo   - No internet connection
@@ -115,11 +109,11 @@ if errorlevel 1 (
 
 echo.
 echo ======================================================================
-echo ✅ SUCCESS! DASHBOARD UPDATED
+echo SUCCESS! DASHBOARD UPDATED
 echo ======================================================================
 echo Commit: %commit_msg%
 echo Status: Pushed to GitHub successfully
-echo URL:    [https://github.com/fawaz2023/trading-dashboard](https://github.com/fawaz2023/trading-dashboard)
+echo URL:    https://github.com/fawaz2023/trading-dashboard
 echo.
 echo Your Streamlit dashboard will refresh in 2-3 minutes
 echo ======================================================================
