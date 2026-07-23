@@ -21,7 +21,7 @@ class ProgressiveSpiker:
         # Baseline 3 conditions (STRICT)
         df = df[df["DELIV_PER"] >= 50]
         df = df[df["DELIVERY_TURNOVER"] >= 5000000]
-        df = df[df["ATW"] >= 20000]
+        df = df[df["ATW"] >= 25000]
         
         # Progressive 9 conditions (if columns exist)
         if all(col in df.columns for col in ["DELIV_PER_1W", "DELIV_PER_1M", "DELIV_PER_3M"]):

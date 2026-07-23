@@ -19,6 +19,6 @@ class ProgressiveSpiker:
         
         df = df[df["DELIV_PER"] >= 40]
         df = df[df["DELIVERY_TURNOVER"] >= 3000000]
-        df = df[df["ATW"] >= 15000]
+        df = df[df["ATW"] >= 25000]
         
         return df.reset_index(drop=True)

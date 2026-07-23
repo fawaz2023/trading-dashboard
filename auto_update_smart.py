@@ -11,7 +11,7 @@ from config import Config
 pd.options.mode.chained_assignment = None
 
 print("=" * 70)
-print("SMART AUTO-UPDATE - NSE + BSE with Real Progressives (ENHANCED)")
+print("SMART AUTO-UPDATE - NSE + BSE with Real Progressives (v4 ENHANCED)")
 print("=" * 70)
 
 holidays = [
@@ -19,8 +19,9 @@ holidays = [
     "2025-05-01", "2025-08-15", "2025-10-02", "2025-10-22",
     "2025-11-01", "2025-11-05", "2025-12-25"
 ]
+
 # ================================================================
-# BACKFILL MISSING DATES (IMPROVED - NOW CHECKS BSE DELIVERY TOO)
+# BACKFILL MISSING DATES (v4 - NOW INCLUDES BSE DELIVERY WITH DATE FIX)
 # ================================================================
 def get_missing_trading_dates(days_to_check=10):
     """Check which trading dates are missing from NSE bhav OR BSE delivery"""
@@ -46,7 +47,7 @@ def get_missing_trading_dates(days_to_check=10):
     return missing_dates
 
 def backfill_missing_dates(missing_dates):
-    """Download NSE + BSE data for all missing dates"""
+    """Download NSE + BSE data for all missing dates (v4 - includes BSE delivery)"""
     if not missing_dates:
         print("✅ No missing dates. Data is up to date.\n")
         return
@@ -56,7 +57,7 @@ def backfill_missing_dates(missing_dates):
     print(f"{'='*70}")
     print(f"Found {len(missing_dates)} missing trading dates:")
     for date in missing_dates:
-        print(f"   📅 {date.strftime('%Y-%m-%d (%A)')}")
+        print(f"  📅 {date.strftime('%Y-%m-%d (%A)')}")
     print(f"{'='*70}\n")
     print("📥 Starting backfill download...\n")
 
@@ -64,19 +65,72 @@ def backfill_missing_dates(missing_dates):
         date_str = date_obj.strftime("%Y%m%d")
         print(f"🔄 Downloading: {date_obj.strftime('%Y-%m-%d')}")
         try:
-            # Download NSE Bhavcopy and Delivery using correct methods
+            # Download NSE Bhavcopy and Delivery
             nse_downloader = NSEDownloaderFixed()
             nse_downloader.download_nse_bhav_new_format(date_obj)
             nse_downloader.download_nse_delivery(date_obj)
 
-            # Download BSE Bhavcopy using your existing code/method
+            # Download BSE Bhavcopy
             bse_downloader = BSEDownloaderWorking()
-            bse_downloader.download_bhav_for_date(date_obj)
-            # (If you need BSE delivery, call its code here too)
+            bse_downloader.download_bse_bhav(date_obj)
 
-            print(f"   ✅ NSE + BSE + Delivery downloaded")
+
+            # v4 FIX: Download BSE Delivery with proper DATE injection
+            bse_deliv_ok = False
+            try:
+                y = date_obj.year
+                ddmm = date_obj.strftime("%d%m")
+                url = f"https://www.bseindia.com/BSEDATA/gross/{y}/SCBSEALL{ddmm}.zip"
+
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Referer': 'https://www.bseindia.com/',
+                }
+
+                r = requests.get(url, timeout=20, verify=False, headers=headers)
+                if r.status_code == 200:
+                    zip_path = f"data/temp_bse_del_{ddmm}.zip"
+                    with open(zip_path, "wb") as f:
+                        f.write(r.content)
+                    with zipfile.ZipFile(zip_path, "r") as z:
+                        z.extractall("data/")
+                    txts = glob.glob(f"data/SCBSEALL{ddmm}.TXT")
+                    if txts:
+                        out_date = date_obj.strftime("%Y%m%d")
+                        df_bse_del = pd.read_csv(txts[0], delimiter="|", dtype=str, encoding="utf-8-sig")
+                        # Strip whitespace from headers (BSE landmine)
+                        df_bse_del.columns = df_bse_del.columns.str.strip()
+
+                        # Normalize column names
+                        ren = {
+                            "SCRIP CODE": "SYMBOL",
+                            "SECURITY_CODE": "SYMBOL",
+                            "DELV. PER.": "DELIV_PER",
+                            "DELIV. PER.": "DELIV_PER",
+                            "DELIVERY QTY": "DELIV_QTY",
+                            "DELIV QTY": "DELIV_QTY",
+                        }
+                        df_bse_del.rename(columns=ren, inplace=True)
+
+                        # CRITICAL v4 FIX: Inject DATE from trading date
+                        df_bse_del["DATE"] = date_obj.strftime("%d%m%Y")
+
+                        # Keep only needed columns (DATE now guaranteed to exist)
+                        df_bse_del = df_bse_del[["DATE", "SYMBOL", "DELIV_QTY", "DELIV_PER"]].copy()
+                        df_bse_del.to_csv(f"data/bse_delivery_{out_date}.csv", index=False)
+                        bse_deliv_ok = True
+
+                        # cleanup
+                        if os.path.exists(zip_path): os.remove(zip_path)
+                        for t in txts:
+                            if os.path.exists(t): os.remove(t)
+            except Exception as e:
+                print(f"  ⚠️  BSE delivery backfill error: {e}")
+
+            print(f"  ✅ NSE + BSE{'+ Delivery' if bse_deliv_ok else ''} downloaded")
         except Exception as e:
-            print(f"   ⚠️  Error: {e}")
+            print(f"  ⚠️  Error: {e}")
             continue
 
     print()
@@ -84,17 +138,8 @@ def backfill_missing_dates(missing_dates):
     print("✅ BACKFILL COMPLETE")
     print(f"{'='*70}\n")
 
-# Run backfill check and download loop
-print(f"{'='*70}")
-print("🔍 CHECKING FOR MISSING DATES...")
-print(f"{'='*70}")
-
-missing_dates = get_missing_trading_dates(days_to_check=10)
-backfill_missing_dates(missing_dates)
-
-
 # -------------------------------
-# Helpers
+# Helpers (defined BEFORE use)
 # -------------------------------
 def to_num(s):
     return pd.to_numeric(s, errors="coerce")
@@ -120,14 +165,14 @@ def normalize_bse_bhav(df):
         "ClsPric": "CLOSE",
         "TtlTradgVol": "TOTTRDQTY",
         "TtlTrfVal": "TOTTRDVAL",
+        "TtlNbOfTxsExctd": "NO_OF_TRADES",
     }
     df = df.rename(columns=ren)
-    # Keep ISIN and FinInstrmId for robust joins
     # Parse DATE
     if "DATE" in df.columns:
         df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
     # Numeric conversions
-    for c in ["CLOSE","TOTTRDQTY","TOTTRDVAL"]:
+    for c in ["CLOSE","TOTTRDQTY","TOTTRDVAL","NO_OF_TRADES"]:
         if c in df.columns:
             df[c] = to_num(df[c]).fillna(0)
     df["EXCHANGE"] = "BSE"
@@ -139,47 +184,42 @@ def normalize_nse_bhav(df, date):
     df = df.copy()
     df["DATE"] = date
     df["EXCHANGE"] = "NSE"
-    for c in ["CLOSE","TOTTRDQTY","TOTTRDVAL"]:
+    if "TtlNbOfTxsExctd" in df.columns:
+        df["NO_OF_TRADES"] = df["TtlNbOfTxsExctd"]
+    for c in ["CLOSE","TOTTRDQTY","TOTTRDVAL","NO_OF_TRADES"]:
         if c in df.columns:
             df[c] = to_num(df[c]).fillna(0)
     # Ensure expected columns
     df = ensure_cols(df, {"ISIN": None, "SYMBOL": None})
     return df
 
-def detect_bse_delivery_key(df_deliv):
-    if "ISIN" in df_deliv.columns:
-        return "ISIN"
-    for c in ["SCRIP CODE","SECURITY_CODE","SCRIP_CODE"]:
-        if c in df_deliv.columns:
-            df_deliv.rename(columns={c:"FinInstrmId"}, inplace=True)
-            return "FinInstrmId"
-    if "SYMBOL" in df_deliv.columns:
-        return "SYMBOL"
-    return None
-
 def normalize_bse_delivery(df_deliv):
     """Standardize BSE delivery column names"""
-    
     # Map various BSE delivery formats to standard names
     ren = {
-        "SCRIP CODE": "SYMBOL",           # Nov 2025 format
+        "SCRIP CODE": "SYMBOL",
         "SECURITY_CODE": "SYMBOL",
         "SCRIP_CODE": "SYMBOL",
-        "DELV. PER.": "DELIV_PER",       # Nov 2025 format
+        "DELV. PER.": "DELIV_PER",
         "DELIV. PER.": "DELIV_PER",
-        "DELIVERY QTY": "DELIV_QTY",      # Nov 2025 format
+        "DELIVERY QTY": "DELIV_QTY",
         "DELIV ": "DELIV_QTY",
         " DELIV_QTY": "DELIV_QTY",
         " DELIV_PER": "DELIV_PER",
     }
-    
     df_deliv.rename(columns=ren, inplace=True)
     df_deliv = ensure_cols(df_deliv, {"DELIV_PER": 0, "DELIV_QTY": 0, "SYMBOL": None})
-    
     df_deliv["DELIV_QTY"] = to_num(df_deliv["DELIV_QTY"]).fillna(0)
     df_deliv["DELIV_PER"] = to_num(df_deliv["DELIV_PER"]).fillna(0)
-    
     return df_deliv
+
+# Run backfill check
+print(f"{'='*70}")
+print("🔍 CHECKING FOR MISSING DATES...")
+print(f"{'='*70}")
+missing_dates = get_missing_trading_dates(days_to_check=10)
+backfill_missing_dates(missing_dates)
+
 # -------------------------------
 # Step 0: Determine download window
 # -------------------------------
@@ -207,39 +247,40 @@ end_date = datetime.now()
 if start_date <= end_date:
     print(f"\nDownloading from {start_date.strftime('%d %b')} to {end_date.strftime('%d %b')}")
     print("=" * 70)
+
     nse_downloader = NSEDownloaderFixed()
     bse_downloader = BSEDownloaderWorking()
-    bse_downloader.download_bse_bhav(date_obj)
-
     downloaded = 0
-
     cur = start_date
+
     while cur <= end_date:
         if cur.weekday() >= 5 or cur.strftime("%Y-%m-%d") in holidays:
             cur += timedelta(days=1)
             continue
 
         print(f"[DOWNLOAD] {cur.strftime('%d %b')} - ", end="")
+
         # NSE
         _, ok_bhav, _ = nse_downloader.download_nse_bhav_new_format(cur)
         _, ok_deliv, _ = nse_downloader.download_nse_delivery(cur)
+
         # BSE bhav
         _, ok_bse, _ = bse_downloader.download_bse_bhav(cur)
 
-        # BSE delivery zip (with browser headers to bypass 403 - fixed Nov 2025)
+        # v4 FIX: BSE delivery with proper DATE injection
         bse_deliv_ok = False
         try:
             y = cur.year
             ddmm = cur.strftime("%d%m")
             url = f"https://www.bseindia.com/BSEDATA/gross/{y}/SCBSEALL{ddmm}.zip"
-            
+
             # Browser headers to bypass BSE's 403 blocking
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Referer': 'https://www.bseindia.com/',
             }
-            
+
             r = requests.get(url, timeout=20, verify=False, headers=headers)
             if r.status_code == 200:
                 zip_path = f"data/temp_bse_del_{ddmm}.zip"
@@ -250,29 +291,35 @@ if start_date <= end_date:
                 txts = glob.glob(f"data/SCBSEALL{ddmm}.TXT")
                 if txts:
                     out_date = cur.strftime("%Y%m%d")
-                    df_bse_del = safe_read_csv(txts[0], delimiter="|", dtype=str)
-    
-                    # Normalize column names before saving
+                    df_bse_del = pd.read_csv(txts[0], delimiter="|", dtype=str, encoding="utf-8-sig")
+                    # Strip whitespace from headers (BSE landmine)
+                    df_bse_del.columns = df_bse_del.columns.str.strip()
+
+                    # Normalize column names
                     ren = {
-                    "SCRIP CODE": "SYMBOL",
-                    "DELV. PER.": "DELIV_PER",
-                    "DELIVERY QTY": "DELIV_QTY",
+                        "SCRIP CODE": "SYMBOL",
+                        "SECURITY_CODE": "SYMBOL",
+                        "DELV. PER.": "DELIV_PER",
+                        "DELIV. PER.": "DELIV_PER",
+                        "DELIVERY QTY": "DELIV_QTY",
+                        "DELIV QTY": "DELIV_QTY",
                     }
                     df_bse_del.rename(columns=ren, inplace=True)
-    
-                    # Keep only needed columns
-                    cols_to_keep = [c for c in ["DATE", "SYMBOL", "DELIV_QTY", "DELIV_PER"] if c in df_bse_del.columns]
-                    if cols_to_keep:
-                       df_bse_del = df_bse_del[cols_to_keep]
-    
+
+                    # CRITICAL v4 FIX: Inject DATE from trading date (cur)
+                    df_bse_del["DATE"] = cur.strftime("%d%m%Y")  # Match BSE DDMMYYYY format
+
+                    # Keep only needed columns (DATE now guaranteed to exist)
+                    df_bse_del = df_bse_del[["DATE", "SYMBOL", "DELIV_QTY", "DELIV_PER"]].copy()
                     df_bse_del.to_csv(f"data/bse_delivery_{out_date}.csv", index=False)
-                    bse_deliv_ok = True  
-                # cleanup
-                if os.path.exists(zip_path): os.remove(zip_path)
-                for t in txts:
-                    if os.path.exists(t): os.remove(t)
+                    bse_deliv_ok = True
+
+                    # cleanup
+                    if os.path.exists(zip_path): os.remove(zip_path)
+                    for t in txts:
+                        if os.path.exists(t): os.remove(t)
         except Exception as e:
-            print(f"\n    ⚠️  BSE delivery error: {e}")
+            print(f"\n  ⚠️  BSE delivery error: {e}")
 
         if ok_bhav:
             msg = "✅ NSE"
@@ -282,6 +329,7 @@ if start_date <= end_date:
             downloaded += 1
         else:
             print("❌")
+
         cur += timedelta(days=1)
 
     if downloaded > 0:
@@ -289,7 +337,7 @@ if start_date <= end_date:
         print(f"DOWNLOAD SUMMARY")
         print(f"{'='*70}")
         print(f"Downloaded: {downloaded} days")
-        
+
         # Validate all files exist
         print("\n📊 Validating downloads...")
         cur = start_date
@@ -297,25 +345,20 @@ if start_date <= end_date:
             if cur.weekday() >= 5 or cur.strftime("%Y-%m-%d") in holidays:
                 cur += timedelta(days=1)
                 continue
-            
             date_str = cur.strftime("%Y%m%d")
             nse_exists = os.path.exists(f"data/nse_raw/nse_bhav_{date_str}.csv")
             bse_exists = os.path.exists(f"data/bse_raw/bse_bhav_{date_str}.csv")
             bse_deliv_exists = os.path.exists(f"data/bse_delivery_{date_str}.csv")
-            
             status = "✅" if (nse_exists and bse_deliv_exists) else "⚠️ "
             msg = f"{status} {cur.strftime('%d %b')}: "
             msg += f"NSE={'✓' if nse_exists else '✗'} "
             msg += f"BSE={'✓' if bse_exists else '✗'} "
             msg += f"Deliv={'✓' if bse_deliv_exists else '✗'}"
             print(msg)
-            
             cur += timedelta(days=1)
-        
         print(f"{'='*70}\n")
 else:
     print("\n✅ Already up to date!")
-
 
 # -------------------------------
 # Step 2: Load NSE bhav
@@ -351,6 +394,7 @@ if bse_bhav_files:
         if df.empty: continue
         df = normalize_bse_bhav(df)
         bse_frames.append(df)
+
 df_bse = pd.concat(bse_frames, ignore_index=True) if bse_frames else pd.DataFrame()
 print(f"✅ BSE records: {len(df_bse)}")
 
@@ -359,6 +403,7 @@ print(f"✅ BSE records: {len(df_bse)}")
 # -------------------------------
 print(f"\n📥 Loading NSE delivery data...")
 nse_delivery_files = sorted([f for f in os.listdir(nse_raw_dir) if f.startswith("nse_delivery_")])
+
 nse_del_frames = []
 for fn in nse_delivery_files:
     date_str = fn.replace("nse_delivery_", "").replace(".csv", "")
@@ -368,17 +413,19 @@ for fn in nse_delivery_files:
     # normalize
     if " SYMBOL" in df.columns:
         df = df.rename(columns={" SYMBOL":"SYMBOL"})
-    df = normalize_bse_delivery(df)  # reuse standardizer for DELIV columns
+    df = normalize_bse_delivery(df)  # reuse standardizer
     df["DATE"] = d
     nse_del_frames.append(df)
+
 df_nse_deliv = pd.concat(nse_del_frames, ignore_index=True) if nse_del_frames else pd.DataFrame()
 print(f"✅ NSE delivery rows: {len(df_nse_deliv)}")
 
 # -------------------------------
-# Step 5: Load BSE delivery (all days)
+# Step 5: Load BSE delivery (v4 - DATE now pre-injected)
 # -------------------------------
 print(f"📥 Loading BSE delivery data...")
 bse_delivery_files = sorted(glob.glob("data/bse_delivery_*.csv"))
+
 bse_del_frames = []
 for fp in bse_delivery_files:
     date_str = os.path.basename(fp).replace("bse_delivery_", "").replace(".csv","")
@@ -386,8 +433,12 @@ for fp in bse_delivery_files:
     df = safe_read_csv(fp)
     if df.empty: continue
     df = normalize_bse_delivery(df)
-    df["DATE"] = d
+    # v4 FIX: Do NOT overwrite DATE - it should already exist from download
+    # Only inject if missing (for backward compat with old CSVs)
+    if "DATE" not in df.columns or df["DATE"].isna().all():
+        df["DATE"] = d
     bse_del_frames.append(df)
+
 df_bse_deliv = pd.concat(bse_del_frames, ignore_index=True) if bse_del_frames else pd.DataFrame()
 print(f"✅ BSE delivery rows: {len(df_bse_deliv)}")
 
@@ -401,14 +452,11 @@ if not df_nse.empty and not df_nse_deliv.empty:
 else:
     df_nse = ensure_cols(df_nse, {"DELIV_PER":0, "DELIV_QTY":0})
 
-
-
 # -------------------------------
-# Step 7: Merge delivery into BSE (auto-detect join key)
+# Step 7: Merge delivery into BSE
 # -------------------------------
 def merge_bse_day(bhav_all, deliv_all):
     """Merge BSE delivery into BSE bhav.
-
     bhav_all: normalized BSE bhav (has FinInstrmId, ISIN, SYMBOL, DATE, CLOSE, etc.)
     deliv_all: BSE delivery (has DATE, SYMBOL (BSE code), DELIV_QTY, DELIV_PER)
     """
@@ -430,34 +478,40 @@ def merge_bse_day(bhav_all, deliv_all):
     }
     deliv_all.rename(columns=ren, inplace=True)
     deliv_all = ensure_cols(deliv_all, {"DELIV_PER": 0, "DELIV_QTY": 0})
-
     deliv_all["DELIV_QTY"] = pd.to_numeric(deliv_all["DELIV_QTY"], errors="coerce").fillna(0)
     deliv_all["DELIV_PER"] = pd.to_numeric(deliv_all["DELIV_PER"], errors="coerce").fillna(0)
 
     # Normalize DATE on both sides
     if "DATE" in out.columns:
-        out["DATE"] = pd.to_datetime(out["DATE"], errors="coerce")
+        if out["DATE"].dtype in ['int64', 'int32']:
+            # Try DDMMYYYY first, fallback to YYYYMMDD
+            out["DATE"] = pd.to_datetime(out["DATE"].astype(str), format="%d%m%Y", errors="coerce")
+            if out["DATE"].isna().all():
+                out["DATE"] = pd.to_datetime(out["DATE"].astype(str), format="%Y%m%d", errors="coerce")
+        else:
+            out["DATE"] = pd.to_datetime(out["DATE"], errors="coerce")
     if "DATE" in deliv_all.columns:
-        deliv_all["DATE"] = pd.to_datetime(deliv_all["DATE"], errors="coerce")
+        if deliv_all["DATE"].dtype in ['int64', 'int32']:
+            # Try DDMMYYYY first (new v4 format), fallback to YYYYMMDD (old format)
+            deliv_all["DATE"] = pd.to_datetime(deliv_all["DATE"].astype(str), format="%d%m%Y", errors="coerce")
+            if deliv_all["DATE"].isna().all():
+                deliv_all["DATE"] = pd.to_datetime(deliv_all["DATE"].astype(str), format="%Y%m%d", errors="coerce")
+        else:
+            deliv_all["DATE"] = pd.to_datetime(deliv_all["DATE"], errors="coerce")
 
-    # IMPORTANT:
-    # In bhav, numeric BSE code is in FinInstrmId
-    # In delivery, numeric code is in SYMBOL
-    # So: rename delivery.SYMBOL -> FinInstrmId and join on that + DATE
+    # BSE join: bhav.FinInstrmId = delivery.SYMBOL (numeric code)
     if "FinInstrmId" in out.columns and "SYMBOL" in deliv_all.columns:
         deliv_all = deliv_all.rename(columns={"SYMBOL": "FinInstrmId"})
 
-    # Coerce join key to string to avoid dtype mismatches
+    # Coerce join key to string
     key = "FinInstrmId"
     if key not in out.columns or key not in deliv_all.columns:
-        # Fallback: no matching key, return with zero delivery
         return ensure_cols(out, {"DELIV_PER": 0, "DELIV_QTY": 0})
 
     out[key] = out[key].astype(str)
     deliv_all[key] = deliv_all[key].astype(str)
 
     cols_keep = [c for c in [key, "DATE", "DELIV_PER", "DELIV_QTY"] if c in deliv_all.columns]
-
     out = out.merge(
         deliv_all[cols_keep],
         on=[key, "DATE"],
@@ -479,19 +533,49 @@ def merge_bse_day(bhav_all, deliv_all):
 
     return out
 
-# Call the merge function before combining NSE and BSE data
 print("\n🔀 Merging BSE delivery data...")
 df_bse = merge_bse_day(df_bse, df_bse_deliv)
-
 bse_merged_count = len(df_bse[df_bse["DELIV_PER"] > 0])
 print(f"✅ BSE stocks with delivery data merged: {bse_merged_count}/{len(df_bse)}")
+
+
+import os
+import pandas as pd
+from datetime import datetime
+
+def log_bse_delivery_stats(df_bse, run_date=None):
+    if run_date is None:
+        run_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    total = len(df_bse)
+    zero_delivery = (df_bse['DELIV_PER'] == 0).sum()
+    partial_delivery = ((df_bse['DELIV_PER'] > 0) & (df_bse['DELIV_PER'] < 100)).sum()
+    full_delivery = (df_bse['DELIV_PER'] == 100).sum()
+
+    stats = {
+        'run_date': run_date,
+        'total_bse_rows': total,
+        'zero_delivery': zero_delivery,
+        'partial_delivery': partial_delivery,
+        'full_delivery': full_delivery,
+    }
+
+    log_file = "data/debug_bse_row_counts.csv"
+    df_stats = pd.DataFrame([stats])
+    if os.path.exists(log_file):
+        df_stats.to_csv(log_file, mode='a', header=False, index=False)
+    else:
+        df_stats.to_csv(log_file, index=False)
+    print("📊 Logged BSE delivery stats:", stats)
+
+# Immediately after your existing merge:
+log_bse_delivery_stats(df_bse)
 
 # -------------------------------
 # Step 8: Combine NSE + BSE, dedupe by ISIN+DATE (NSE priority)
 # -------------------------------
 print("\n🔀 Combining NSE + BSE and deduplicating by ISIN+DATE (NSE priority)")
-df_all = pd.concat([df_nse, df_bse], ignore_index=True, sort=False)
 
+df_all = pd.concat([df_nse, df_bse], ignore_index=True, sort=False)
 print(f"Total rows before dedup: {len(df_all)}")
 print(f"Count by exchange before dedup:\n{df_all['EXCHANGE'].value_counts()}")
 
@@ -504,23 +588,20 @@ else:
 df_all["EXCH_PRIORITY"] = df_all["EXCHANGE"].apply(lambda x: 0 if x == "NSE" else 1)
 
 has_isin = "ISIN" in df_all.columns and df_all["ISIN"].notna().sum() > 0
-
 if has_isin:
     df_all = df_all.sort_values(["ISIN", "DATE", "EXCH_PRIORITY"])
     before_dedup = len(df_all)
     df_all = df_all.drop_duplicates(subset=["ISIN", "DATE"], keep="first")
     after_dedup = len(df_all)
-
     print(f"Total rows after dedup: {after_dedup}")
     print(f"Rows removed: {before_dedup - after_dedup}")
     print(f"Count by exchange after dedup:\n{df_all['EXCHANGE'].value_counts()}")
 else:
-    print("⚠️ ISIN missing or empty, falling back to SYMBOL deduplication")
+    print("⚠️  ISIN missing or empty, falling back to SYMBOL deduplication")
     df_all = df_all.sort_values(["SYMBOL", "DATE", "EXCH_PRIORITY"])
     before_dedup = len(df_all)
     df_all = df_all.drop_duplicates(subset=["SYMBOL", "DATE"], keep="first")
     after_dedup = len(df_all)
-
     print(f"Total rows after dedup: {after_dedup}")
     print(f"Rows removed: {before_dedup - after_dedup}")
     print(f"Count by exchange after dedup:\n{df_all['EXCHANGE'].value_counts()}")
@@ -530,13 +611,14 @@ df_all.drop(columns=["EXCH_PRIORITY"], inplace=True, errors="ignore")
 # -------------------------------
 # Step 9: Compute metrics + filter universe
 # -------------------------------
-df_all = ensure_cols(df_all, {"CLOSE":0,"TOTTRDQTY":0,"TOTTRDVAL":0,"DELIV_QTY":0,"DELIV_PER":0})
+df_all = ensure_cols(df_all, {"CLOSE":0,"TOTTRDQTY":0,"TOTTRDVAL":0, "NO_OF_TRADES":0,"DELIV_QTY":0,"DELIV_PER":0})
+
 for c in ["CLOSE","TOTTRDQTY","TOTTRDVAL","DELIV_QTY","DELIV_PER"]:
     df_all[c] = to_num(df_all[c]).fillna(0)
 
 # Core metrics
 df_all["DELIVERY_TURNOVER"] = df_all["DELIV_QTY"] * df_all["CLOSE"]
-df_all["ATW"] = df_all["TOTTRDVAL"] / 1000
+df_all["ATW"] = (df_all["TOTTRDVAL"] / df_all["NO_OF_TRADES"].replace(0, pd.NA)).fillna(0)
 
 # Filter SERIES (keep NSE EQ & all BSE)
 if "SERIES" in df_all.columns:
@@ -548,7 +630,7 @@ if "SERIES" in df_all.columns:
     after = len(df_all)
     print(f"\nFiltered by SERIES (NSE EQ + all BSE): {before} -> {after}")
 
-# Symbol-based exclusions (broad noise filters)
+# Symbol-based exclusions
 if "SYMBOL" in df_all.columns:
     before = len(df_all)
     df_all = df_all[
@@ -568,39 +650,37 @@ bad_isins = [
     "INE549K08293", "INE612U07118", "INE733E07JR2", "INE787H07362",
     "INE836K07312", "INE939X07093",
 ]
-
 if "ISIN" in df_all.columns:
     before = len(df_all)
     df_all = df_all[~df_all["ISIN"].isin(bad_isins)].copy()
     after = len(df_all)
-# ===== EXCLUDE NON-EQUITY BSE INSTRUMENTS (BONDS, T-BILLS, SGBs, G-SECS) =====
+
+# Exclude non-equity BSE instruments (bonds, T-bills, SGBs, G-secs)
 if "SYMBOL" in df_all.columns:
     before = len(df_all)
-    
     bond_patterns = [
-        r'^GS\d',                           # Government Securities: GS15MAR34C
-        r'^\d{3,4}GS\d',                    # G-Secs: 723GS39P, 824GS2027
-        r'^\d{3,4}[A-Z]{2,4}\d{2,4}[A-Z]?$', # ALL bonds: 754SBI38, 781IHFCL28
-        r'^SGB',                            # Sovereign Gold Bonds
-        r'\d+TB$',                          # Treasury Bills
-        r'SDL',                             # State Development Loans
-        r'MHSDL',                           # Maharashtra SDL
+        r'^GS\d',
+        r'^\d{3,4}GS\d',
+        r'^\d{3,4}[A-Z]{2,4}\d{2,4}[A-Z]?$',
+        r'^SGB',
+        r'\d+TB$',
+        r'SDL',
+        r'MHSDL',
     ]
-    
     pattern = '|'.join(bond_patterns)
     df_all = df_all[~df_all["SYMBOL"].str.contains(pattern, regex=True, na=False, case=False)].copy()
-    
     after = len(df_all)
     print(f"Excluded bonds, T-bills, SGBs, and G-Secs: {before} -> {after}")
-# ===== CALCULATE PROGRESSIVE AVERAGES =====
+
+# -------------------------------
+# Step 10: Calculate progressive averages
+# -------------------------------
 print("\n📈 Calculating progressive averages...")
 
-# Verify the source dataframe has DATE col
 if "DATE" not in df_all.columns:
     raise ValueError("DATE column missing in df_all before progressive averages")
 
 df_all["DATE"] = pd.to_datetime(df_all["DATE"], errors="coerce")
-
 symbols = df_all["SYMBOL"].dropna().unique().tolist()
 results = []
 processed = 0
@@ -612,8 +692,8 @@ for symbol in symbols:
 
     latest = df_stock.iloc[-1]
     latest_dt = latest["DATE"]
-
     hist = df_stock[df_stock["DATE"] < latest_dt].sort_values("DATE", ascending=False)
+
     df_1w = hist.head(5)
     df_1m = hist.head(22)
     df_3m = hist.head(66)
@@ -630,11 +710,9 @@ for symbol in symbols:
         "DELIV_PER_1W": df_1w["DELIV_PER"].mean() if len(df_1w) > 0 else latest.get("DELIV_PER", 0),
         "DELIV_PER_1M": df_1m["DELIV_PER"].mean() if len(df_1m) > 0 else latest.get("DELIV_PER", 0),
         "DELIV_PER_3M": df_3m["DELIV_PER"].mean() if len(df_3m) > 0 else latest.get("DELIV_PER", 0),
-
         "DELIVERY_TURNOVER_1W": df_1w["DELIVERY_TURNOVER"].mean() if len(df_1w) > 0 else latest.get("DELIVERY_TURNOVER", 0),
         "DELIVERY_TURNOVER_1M": df_1m["DELIVERY_TURNOVER"].mean() if len(df_1m) > 0 else latest.get("DELIVERY_TURNOVER", 0),
         "DELIVERY_TURNOVER_3M": df_3m["DELIVERY_TURNOVER"].mean() if len(df_3m) > 0 else latest.get("DELIVERY_TURNOVER", 0),
-
         "ATW_1W": df_1w["ATW"].mean() if len(df_1w) > 0 else latest.get("ATW", 0),
         "ATW_1M": df_1m["ATW"].mean() if len(df_1m) > 0 else latest.get("ATW", 0),
         "ATW_3M": df_3m["ATW"].mean() if len(df_3m) > 0 else latest.get("ATW", 0),
@@ -650,6 +728,7 @@ df_final = pd.DataFrame(results)
 # Step 11: Save outputs
 # -------------------------------
 os.makedirs(os.path.dirname(Config.COMBINED_FILE), exist_ok=True)
+
 dashboard_file = "data/combined_dashboard_live.csv"
 df_final.to_csv(dashboard_file, index=False)
 df_final.to_csv(Config.COMBINED_FILE, index=False)
@@ -657,16 +736,15 @@ df_final.to_csv(Config.COMBINED_FILE, index=False)
 import shutil
 shutil.copy("data/combined_dashboard_live.csv", "data/dashboard_cloud.csv")
 
-
 print("\n" + "="*70)
 print("✅ SUCCESS!")
-print(f"   Total Stocks: {len(df_final)} (NSE + BSE deduplicated by ISIN/DATE)")
-print(f"   NSE Stocks: {len(df_final[df_final['EXCHANGE']=='NSE'])}")
-print(f"   BSE Stocks: {len(df_final[df_final['EXCHANGE']=='BSE'])}")
+print(f"  Total Stocks: {len(df_final)} (NSE + BSE deduplicated by ISIN/DATE)")
+print(f"  NSE Stocks: {len(df_final[df_final['EXCHANGE']=='NSE'])}")
+print(f"  BSE Stocks: {len(df_final[df_final['EXCHANGE']=='BSE'])}")
 if pd.notna(latest_date):
-    print(f"   Latest Date: {latest_date.strftime('%d %b %Y')}")
-print(f"   Dashboard (LIVE): {dashboard_file}")
-print(f"   Legacy (Backtest): {Config.COMBINED_FILE}")
+    print(f"  Latest Date: {latest_date.strftime('%d %b %Y')}")
+print(f"  Dashboard (LIVE): {dashboard_file}")
+print(f"  Legacy (Backtest): {Config.COMBINED_FILE}")
 print("="*70)
 
 import sys

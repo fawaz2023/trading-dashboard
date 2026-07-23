@@ -102,14 +102,14 @@ if page == "Dashboard":
             if len(sig) > 0:
                 st.success(f"✅ Found {len(sig)} signals passing all 12 conditions")
                 cols = [c for c in ["SYMBOL","EXCHANGE","CLOSE","DELIV_PER","DELIVERY_TURNOVER","ATW"] if c in sig.columns]
-                st.dataframe(sig[cols].head(30), use_container_width=True, height=500)
+                st.dataframe(sig[cols].head(30), width='stretch', height=500)
                 
                 st.markdown("<div class='subsection'>Add Signal to Watchlist</div>", unsafe_allow_html=True)
                 col1, col2 = st.columns([2, 1])
                 with col1:
                     selected_stock = st.selectbox("📌 Select Stock", sig["SYMBOL"].tolist())
                 with col2:
-                    if st.button("➕ Add", use_container_width=True):
+                    if st.button("➕ Add", width='stretch'):
                         row = sig[sig["SYMBOL"] == selected_stock].iloc[0]
                         try:
                             from watchlist_manager import WatchlistManager
@@ -137,7 +137,7 @@ elif page == "Data Health":
     with tabs[0]:
         st.markdown("<div class='subsection'>Download NSE & BSE Data</div>", unsafe_allow_html=True)
         
-        if st.button("🚀 Download All", use_container_width=True):
+        if st.button("🚀 Download All", width='stretch'):
             from data_downloader_improved import DataDownloaderImproved
             with st.spinner("⏳ Downloading..."):
                 res = DataDownloaderImproved().download_all()
@@ -192,7 +192,7 @@ elif page == "Data Health":
             with c3: metric("BSE", f"{bse_count:,}")
             with c4: metric("Date Range", date_info)
             
-            st.dataframe(df.head(30), use_container_width=True)
+            st.dataframe(df.head(30), width='stretch')
         else:
             st.info("No combined file")
     
@@ -214,7 +214,7 @@ elif page == "Data Health":
                 with c3: metric("Records", f"{len(df):,}")
                 with c4: metric("Symbols", f"{df['SYMBOL'].nunique() if 'SYMBOL' in df.columns else 0:,}")
                 
-                st.dataframe(df.head(20), use_container_width=True)
+                st.dataframe(df.head(20), width='stretch')
     
     with tabs[3]:
         st.markdown("<div class='subsection'>NSE Delivery (MTO)</div>", unsafe_allow_html=True)
@@ -234,7 +234,7 @@ elif page == "Data Health":
                 with c3: metric("Records", f"{len(df):,}")
                 with c4: metric("Columns", len(df.columns))
                 
-                st.dataframe(df.head(20), use_container_width=True)
+                st.dataframe(df.head(20), width='stretch')
     
     with tabs[4]:
         st.markdown("<div class='subsection'>BSE Data</div>", unsafe_allow_html=True)
@@ -254,7 +254,7 @@ elif page == "Data Health":
                 with c3: metric("Records", f"{len(df):,}")
                 with c4: metric("Symbols", f"{df.get('SC_CODE', df.iloc[:, 0]).nunique()}")
                 
-                st.dataframe(df.head(20), use_container_width=True)
+                st.dataframe(df.head(20), width='stretch')
             else:
                 st.info("No BSE files - Try downloading")
 
@@ -318,7 +318,7 @@ elif page == "Signals":
             # Display signals
             display_cols = ["SYMBOL", "EXCHANGE", "CLOSE", "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "MOMENTUM_SCORE"]
             available_cols = [col for col in display_cols if col in signals.columns]
-            st.dataframe(signals[available_cols], use_container_width=True)
+            st.dataframe(signals[available_cols], width='stretch')
             
             # Signal History Section
             st.markdown("<div class='subsection'>Signal History</div>", unsafe_allow_html=True)
@@ -333,7 +333,7 @@ elif page == "Signals":
                 with c3: metric("Date Range", f"{df_history['Date'].min()} to {df_history['Date'].max()}")
                 
                 # Show last 50 signals
-                st.dataframe(df_history.tail(50), use_container_width=True)
+                st.dataframe(df_history.tail(50), width='stretch')
                 
                 # Download button
                 csv = df_history.to_csv(index=False).encode('utf-8')
@@ -372,7 +372,7 @@ elif page == "Verify Conditions":
                         st.markdown("<div class='subsection'>Baseline (3 Conditions)</div>", unsafe_allow_html=True)
                         st.write(f"1. Delivery % ≥ 50: {row.get('DELIV_PER', 0):.2f} {'✅' if row.get('DELIV_PER', 0) >= 50 else '❌'}")
                         st.write(f"2. Turnover ≥ 5M: {row.get('DELIVERY_TURNOVER', 0):,.0f} {'✅' if row.get('DELIVERY_TURNOVER', 0) >= 5000000 else '❌'}")
-                        st.write(f"3. ATW ≥ 20K: {row.get('ATW', 0):,.0f} {'✅' if row.get('ATW', 0) >= 20000 else '❌'}")
+                        st.write(f"3. ATW ≥ 25K: {row.get('ATW', 0):,.0f} {'✅' if row.get('ATW', 0) >= 25000 else '❌'}")
                         
                         st.markdown("<div class='subsection'>Progression (9 Conditions)</div>", unsafe_allow_html=True)
                         d = row.get('DELIV_PER',0); d1w = row.get('DELIV_PER_1W',0); d1m = row.get('DELIV_PER_1M',0); d3m = row.get('DELIV_PER_3M',0)
@@ -413,7 +413,7 @@ elif page == "Watchlist":
             display_cols = ["symbol", "entry_price", "current_price", "tp", "sl", "entry_date"]
             display_df = wm.active[display_cols].copy()
             
-            st.dataframe(display_df, use_container_width=True, height=400)
+            st.dataframe(display_df, width='stretch', height=400)
             
             # Delete section with explicit stock selection
             st.markdown("<div class='subsection'>Close Position (Record Trade)</div>", unsafe_allow_html=True)

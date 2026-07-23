@@ -41,9 +41,11 @@ REM ===== STEP 2: Check if files actually changed =====
 echo [2/4] Checking for file changes...
 echo ----------------------------------------------------------------------
 
-REM Check git status for ANY changes (staged or unstaged)
-git status --porcelain | findstr /C:"data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv data/combined_dashboard_live.csv auto_update_smart.py" >nul
-set files_changed=%errorlevel%
+REM Check git status for changes in key data and script files
+set files_changed=1
+for %%F in (data\combined_2years.csv data\signal_history.csv data\dashboard_cloud.csv data\combined_dashboard_live.csv auto_update_smart.py) do (
+    git diff --quiet -- "%%F" 2>nul || set files_changed=0
+)
 
 if %files_changed% NEQ 0 (
     echo.
@@ -63,7 +65,7 @@ echo.
 REM ===== STEP 3: Add files to Git =====
 echo [3/4] Staging changed files...
 echo ----------------------------------------------------------------------
-git add data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv data/combined_dashboard_live.csv auto_update_smart.py auto_push_github.bat
+git add data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv data/combined_dashboard_live.csv auto_update_smart.py auto_push_github.bat progressive_screener.py progressive_screener_baseline_only.py dashboard_full.py nse_downloader_fixed_nov2025.py rebuild_data.py audit_phase3_conditions.py audit_pipeline_faithful.py audit_test1.py test_signals.py test_scanner/test_live_scanner.py
 
 if errorlevel 1 (
     echo ERROR: Failed to stage files
