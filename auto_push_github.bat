@@ -1,5 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
+set PYTHONUTF8=1
 
 REM ======================================================================
 REM SMART AUTO-UPDATE AND PUSH TO GITHUB WITH EMAIL ALERT ON ERROR
@@ -37,17 +38,20 @@ echo.
 echo Download successful!
 echo.
 
-REM ===== STEP 2: Check if files actually changed =====
-echo [2/4] Checking for file changes...
+REM ===== STEP 2 & 3: Stage Files and Check for Changes =====
+echo [2/4] Staging files...
 echo ----------------------------------------------------------------------
+git add data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv
 
-REM Check git status for changes in key data and script files
-set files_changed=1
-for %%F in (data\combined_2years.csv data\signal_history.csv data\dashboard_cloud.csv data\combined_dashboard_live.csv auto_update_smart.py) do (
-    git diff --quiet -- "%%F" 2>nul || set files_changed=0
+if errorlevel 1 (
+    echo ERROR: Failed to stage files
+    goto :error
 )
 
-if %files_changed% NEQ 0 (
+echo [3/4] Checking for staged changes...
+echo ----------------------------------------------------------------------
+git diff --cached --quiet
+if %errorlevel% EQU 0 (
     echo.
     echo ======================================================================
     echo NO CHANGES DETECTED
@@ -60,19 +64,7 @@ if %files_changed% NEQ 0 (
 )
 
 echo Changes detected! Preparing to push...
-echo.
-
-REM ===== STEP 3: Add files to Git =====
-echo [3/4] Staging changed files...
-echo ----------------------------------------------------------------------
-git add data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv data/combined_dashboard_live.csv auto_update_smart.py auto_push_github.bat progressive_screener.py progressive_screener_baseline_only.py dashboard_full.py nse_downloader_fixed_nov2025.py rebuild_data.py audit_phase3_conditions.py audit_pipeline_faithful.py audit_test1.py test_signals.py test_scanner/test_live_scanner.py
-
-if errorlevel 1 (
-    echo ERROR: Failed to stage files
-    goto :error
-)
-
-echo Files staged
+git status --short
 echo.
 
 REM ===== STEP 4: Commit and Push to GitHub =====
