@@ -19,7 +19,7 @@ class Config:
         # Baseline Conditions (3)
         "delivery_pct_min": 50,              # Condition 1: Delivery % >= 50
         "delivery_turnover_min": 5000000,    # Condition 2: Delivery Turnover >= 5M
-        "atw_min": 20000,                    # Condition 3: ATW >= 20K
+        "atw_min": 25000,                    # Condition 3: ATW >= 25K
         
         # Conditions 4-12 are progression checks in screener
         # 4-6: Delivery % progression (Today > 1W > 1M > 3M)
