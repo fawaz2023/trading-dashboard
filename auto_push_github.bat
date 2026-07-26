@@ -37,40 +37,34 @@ echo.
 echo Download successful!
 echo.
 
-REM ===== STEP 2: Check if files actually changed =====
-echo [2/4] Checking for file changes...
+REM ===== STEP 2: Stage files and check if anything actually changed =====
+echo [2/4] Staging files and checking for changes...
 echo ----------------------------------------------------------------------
 
-REM Check git status for changes in key data and script files
-set files_changed=1
-for %%F in (data\combined_2years.csv data\signal_history.csv data\dashboard_cloud.csv data\combined_dashboard_live.csv auto_update_smart.py) do (
-    git diff --quiet -- "%%F" 2>nul || set files_changed=0
-)
+REM Stage all trackable output files FIRST, then diff the index
+git add data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv auto_update_smart.py auto_push_github.bat progressive_screener.py dashboard_full.py config.py nse_downloader_fixed_nov2025.py rebuild_data.py
 
-if %files_changed% NEQ 0 (
+REM Check if staging produced any diff vs last commit
+git diff --cached --quiet
+if not errorlevel 1 (
     echo.
     echo ======================================================================
     echo NO CHANGES DETECTED
     echo ======================================================================
     echo Reason: Data files are identical to last commit
-    echo Action: Skipping GitHub push (nothing to update)
+    echo Action: Skipping GitHub push - nothing to update
     echo Note:   This is normal on weekends/holidays
     echo ======================================================================
+    git reset HEAD >nul 2>nul
     goto :end_success
 )
 
 echo Changes detected! Preparing to push...
 echo.
 
-REM ===== STEP 3: Add files to Git =====
-echo [3/4] Staging changed files...
+REM ===== STEP 3: Files already staged in Step 2 =====
+echo [3/4] Files already staged...
 echo ----------------------------------------------------------------------
-git add data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv data/combined_dashboard_live.csv auto_update_smart.py auto_push_github.bat progressive_screener.py progressive_screener_baseline_only.py dashboard_full.py nse_downloader_fixed_nov2025.py rebuild_data.py audit_phase3_conditions.py audit_pipeline_faithful.py audit_test1.py test_signals.py test_scanner/test_live_scanner.py
-
-if errorlevel 1 (
-    echo ERROR: Failed to stage files
-    goto :error
-)
 
 echo Files staged
 echo.
@@ -90,7 +84,19 @@ if errorlevel 1 (
 
 echo Committed locally
 echo.
-echo Pushing to GitHub...
+REM Push only if on main branch
+for /f "tokens=*" %%b in ('git branch --show-current') do set current_branch=%%b
+if "!current_branch!" NEQ "main" (
+    echo.
+    echo ======================================================================
+    echo ERROR: Cannot push from feature branch '!current_branch!'
+    echo ======================================================================
+    echo Reason: Automation is only allowed to push the 'main' branch to production.
+    echo Action: Merge to main manually, then push.
+    echo ======================================================================
+    goto :error
+)
+echo Pushing branch !current_branch! to GitHub...
 
 git push origin main
 
@@ -130,8 +136,6 @@ echo.
 echo End Time: %date% %time%
 echo ======================================================================
 echo.
-echo Press any key to close...
-pause > nul
 exit /b 1
 
 REM ===== SUCCESS EXIT =====

@@ -215,7 +215,7 @@ def normalize_bse_delivery(df_deliv):
 
 # Run backfill check
 print(f"{'='*70}")
-print("🔍 CHECKING FOR MISSING DATES...")
+print("[SEARCH] CHECKING FOR MISSING DATES...")
 print(f"{'='*70}")
 missing_dates = get_missing_trading_dates(days_to_check=10)
 backfill_missing_dates(missing_dates)
@@ -663,9 +663,12 @@ if "SYMBOL" in df_all.columns:
         r'^\d{3,4}GS\d',
         r'^\d{3,4}[A-Z]{2,4}\d{2,4}[A-Z]?$',
         r'^SGB',
-        r'\d+TB$',
+        r'\d+TB',
         r'SDL',
         r'MHSDL',
+        r'PP$',
+        r'^CS\d',
+        r'^EELZ',
     ]
     pattern = '|'.join(bond_patterns)
     df_all = df_all[~df_all["SYMBOL"].str.contains(pattern, regex=True, na=False, case=False)].copy()
