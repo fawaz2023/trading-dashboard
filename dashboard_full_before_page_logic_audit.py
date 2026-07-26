@@ -65,9 +65,6 @@ def metric(label, value):
     st.markdown(f"<div class='card metric'><div class='label'>{label}</div><div class='value'>{value}</div></div>", unsafe_allow_html=True)
 
 page = st.sidebar.radio("Navigation", ["Dashboard", "Data Health", "Signals", "Verify Conditions", "Watchlist", "Win Rate"])
-st.sidebar.divider()
-exclude_t2t = st.sidebar.checkbox("🚫 Hide 100% Delivery (T2T)", value=True)
-
 
 # DASHBOARD
 if page == "Dashboard":
@@ -101,11 +98,7 @@ if page == "Dashboard":
             with c4: metric("Data as of", latest_date.strftime("%d %b %Y"))
             
             st.markdown("<div class='section'>12-Condition Signals</div>", unsafe_allow_html=True)
-            if exclude_t2t and "EVER_100_DELIV" in df.columns:
-                df_filt = df[df["EVER_100_DELIV"] == False]
-            else:
-                df_filt = df
-            sig = ProgressiveSpiker(df_filt).get_signals()
+            sig = ProgressiveSpiker(df).get_signals()
             if len(sig) > 0:
                 st.success(f"✅ Found {len(sig)} signals passing all 12 conditions")
                 cols = [c for c in ["SYMBOL","EXCHANGE","CLOSE","DELIV_PER","DELIVERY_TURNOVER","ATW"] if c in sig.columns]
@@ -299,11 +292,7 @@ elif page == "Signals":
         
         # Use ProgressiveSpiker instead of duplicate logic
         from progressive_screener import ProgressiveSpiker
-        if exclude_t2t and "EVER_100_DELIV" in df.columns:
-            df_filt = df[df["EVER_100_DELIV"] == False]
-        else:
-            df_filt = df
-        signals = ProgressiveSpiker(df_filt).get_signals()
+        signals = ProgressiveSpiker(df).get_signals()
         
         if len(signals) > 0:
             # Calculate Momentum Score
@@ -374,23 +363,16 @@ elif page == "Verify Conditions":
 
         if os.path.exists(LIVE_FILE):
             df = pd.read_csv(LIVE_FILE)
-            if exclude_t2t and "EVER_100_DELIV" in df.columns:
-                df_filt = df[df["EVER_100_DELIV"] == False]
-            else:
-                df_filt = df
-            sig = ProgressiveSpiker(df_filt).get_signals()
+            sig = ProgressiveSpiker(df).get_signals()
             if len(sig) > 0:
                 st.success(f"Found {len(sig)} signals - Checking first 5...")
                 
                 for idx, row in sig.head(5).iterrows():
                     with st.expander(f"🔍 {row.get('SYMBOL', 'N/A')}"):
                         st.markdown("<div class='subsection'>Baseline (3 Conditions)</div>", unsafe_allow_html=True)
-                        deliv_min = Config.PROGRESSIVE_SPIKE.get("delivery_pct_min", 50)
-                        turnover_min = Config.PROGRESSIVE_SPIKE.get("delivery_turnover_min", 5000000)
-                        atw_min = Config.PROGRESSIVE_SPIKE.get("atw_min", 25000)
-                        st.write(f"1. Delivery % ≥ {deliv_min}: {row.get('DELIV_PER', 0):.2f} {'✅' if row.get('DELIV_PER', 0) >= deliv_min else '❌'}")
-                        st.write(f"2. Turnover ≥ {turnover_min/1000000:g}M: {row.get('DELIVERY_TURNOVER', 0):,.0f} {'✅' if row.get('DELIVERY_TURNOVER', 0) >= turnover_min else '❌'}")
-                        st.write(f"3. ATW ≥ {atw_min/1000:g}K: {row.get('ATW', 0):,.0f} {'✅' if row.get('ATW', 0) >= atw_min else '❌'}")
+                        st.write(f"1. Delivery % ≥ 50: {row.get('DELIV_PER', 0):.2f} {'✅' if row.get('DELIV_PER', 0) >= 50 else '❌'}")
+                        st.write(f"2. Turnover ≥ 5M: {row.get('DELIVERY_TURNOVER', 0):,.0f} {'✅' if row.get('DELIVERY_TURNOVER', 0) >= 5000000 else '❌'}")
+                        st.write(f"3. ATW ≥ 25K: {row.get('ATW', 0):,.0f} {'✅' if row.get('ATW', 0) >= 25000 else '❌'}")
                         
                         st.markdown("<div class='subsection'>Progression (9 Conditions)</div>", unsafe_allow_html=True)
                         d = row.get('DELIV_PER',0); d1w = row.get('DELIV_PER_1W',0); d1m = row.get('DELIV_PER_1M',0); d3m = row.get('DELIV_PER_3M',0)

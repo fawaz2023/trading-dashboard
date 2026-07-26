@@ -698,6 +698,9 @@ for symbol in symbols:
     df_1m = hist.head(22)
     df_3m = hist.head(66)
 
+    # Check if this stock ever had 100% delivery in the processed history
+    has_100_deliv = bool((df_stock["DELIV_PER"] >= 99.9).any())
+
     results.append({
         "DATE": latest_dt,
         "SYMBOL": symbol,
@@ -707,6 +710,7 @@ for symbol in symbols:
         "DELIV_PER": latest.get("DELIV_PER", 0),
         "DELIVERY_TURNOVER": latest.get("DELIVERY_TURNOVER", 0),
         "ATW": latest.get("ATW", 0),
+        "EVER_100_DELIV": has_100_deliv,
         "DELIV_PER_1W": df_1w["DELIV_PER"].mean() if len(df_1w) > 0 else latest.get("DELIV_PER", 0),
         "DELIV_PER_1M": df_1m["DELIV_PER"].mean() if len(df_1m) > 0 else latest.get("DELIV_PER", 0),
         "DELIV_PER_3M": df_3m["DELIV_PER"].mean() if len(df_3m) > 0 else latest.get("DELIV_PER", 0),

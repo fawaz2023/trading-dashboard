@@ -1,4 +1,5 @@
 import pandas as pd
+from config import Config
 
 class ProgressiveSpiker:
     def __init__(self, df):
@@ -18,10 +19,15 @@ class ProgressiveSpiker:
         df = df[df["DELIVERY_TURNOVER"] > 0]
         df = df[df["ATW"] > 0]
         
+        # Get baseline thresholds from config
+        deliv_min = Config.PROGRESSIVE_SPIKE.get("delivery_pct_min", 50)
+        turnover_min = Config.PROGRESSIVE_SPIKE.get("delivery_turnover_min", 5000000)
+        atw_min = Config.PROGRESSIVE_SPIKE.get("atw_min", 25000)
+
         # Baseline 3 conditions (STRICT)
-        df = df[df["DELIV_PER"] >= 50]
-        df = df[df["DELIVERY_TURNOVER"] >= 5000000]
-        df = df[df["ATW"] >= 25000]
+        df = df[df["DELIV_PER"] >= deliv_min]
+        df = df[df["DELIVERY_TURNOVER"] >= turnover_min]
+        df = df[df["ATW"] >= atw_min]
         
         # Progressive 9 conditions (if columns exist)
         if all(col in df.columns for col in ["DELIV_PER_1W", "DELIV_PER_1M", "DELIV_PER_3M"]):
