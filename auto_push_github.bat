@@ -38,8 +38,26 @@ echo.
 echo Download successful!
 echo.
 
-REM ===== STEP 2: Stage files and check if anything actually changed =====
-echo [2/4] Staging files and checking for changes...
+REM ===== STEP 2: Sanity Check Diagnostics =====
+echo [2/5] Running Pipeline Diagnostics...
+echo ----------------------------------------------------------------------
+python diagnostic.py
+
+if errorlevel 1 (
+    echo.
+    echo ======================================================================
+    echo ERROR: Diagnostics Failed!
+    echo ======================================================================
+    echo Reason: Data sanity check failed (missing columns or huge row drop)
+    echo Action: Skipping GitHub push to avoid corrupting production
+    echo ======================================================================
+    goto :error
+)
+
+echo.
+
+REM ===== STEP 3: Stage files and check if anything actually changed =====
+echo [3/5] Staging files and checking for changes...
 echo ----------------------------------------------------------------------
 
 REM Stage all trackable output files FIRST, then diff the index
@@ -63,15 +81,15 @@ if not errorlevel 1 (
 echo Changes detected! Preparing to push...
 echo.
 
-REM ===== STEP 3: Files already staged in Step 2 =====
-echo [3/4] Files already staged...
+REM ===== STEP 4: Files already staged in Step 3 =====
+echo [4/5] Files already staged...
 echo ----------------------------------------------------------------------
 
 echo Files staged
 echo.
 
-REM ===== STEP 4: Commit and Push to GitHub =====
-echo [4/4] Pushing to GitHub...
+REM ===== STEP 5: Commit and Push to GitHub =====
+echo [5/5] Pushing to GitHub...
 echo ----------------------------------------------------------------------
 
 REM Create commit message with timestamp

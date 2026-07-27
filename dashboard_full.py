@@ -6,6 +6,20 @@ from config import Config
 
 st.set_page_config(page_title="Trading Dashboard", layout="wide")
 
+@st.cache_data(ttl=3600)
+def load_live_data(filepath):
+    if os.path.exists(filepath):
+        df = pd.read_csv(filepath)
+        if "DATE" in df.columns:
+            df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+        return df
+    return None
+
+@st.cache_data
+def get_cached_signals(df_filt):
+    from progressive_screener import ProgressiveSpiker
+    return ProgressiveSpiker(df_filt).get_signals()
+
 # FZ STANDARD THEME WITH HOVER EFFECTS
 st.markdown('''<style>
     :root { --card: rgba(255,255,255,.08); --border: rgba(255,255,255,.15); --accent:#8ea2ff; }
@@ -79,7 +93,7 @@ if page == "Dashboard":
 
         
         if os.path.exists(LIVE_FILE):
-            df = pd.read_csv(LIVE_FILE)
+            df = load_live_data(LIVE_FILE)
             
             # Validate DATE column
             if "DATE" not in df.columns or df["DATE"].isna().all():
@@ -105,7 +119,7 @@ if page == "Dashboard":
                 df_filt = df[df["EVER_100_DELIV"] == False]
             else:
                 df_filt = df
-            sig = ProgressiveSpiker(df_filt).get_signals()
+            sig = get_cached_signals(df_filt)
             if len(sig) > 0:
                 st.success(f"✅ Found {len(sig)} signals passing all 12 conditions")
                 cols = [c for c in ["SYMBOL","EXCHANGE","CLOSE","DELIV_PER","DELIVERY_TURNOVER","ATW"] if c in sig.columns]
@@ -179,7 +193,7 @@ elif page == "Data Health":
 
 
         if os.path.exists(LIVE_FILE):
-            df = pd.read_csv(LIVE_FILE)
+            df = load_live_data(LIVE_FILE)
             
             if "DATE" in df.columns:
                 df["DATE"] = pd.to_datetime(df["DATE"], errors='coerce')
@@ -303,7 +317,7 @@ elif page == "Signals":
             df_filt = df[df["EVER_100_DELIV"] == False]
         else:
             df_filt = df
-        signals = ProgressiveSpiker(df_filt).get_signals()
+        signals = get_cached_signals(df_filt)
         
         if len(signals) > 0:
             # Calculate Momentum Score
@@ -373,12 +387,12 @@ elif page == "Verify Conditions":
 
 
         if os.path.exists(LIVE_FILE):
-            df = pd.read_csv(LIVE_FILE)
+            df = load_live_data(LIVE_FILE)
             if exclude_t2t and "EVER_100_DELIV" in df.columns:
                 df_filt = df[df["EVER_100_DELIV"] == False]
             else:
                 df_filt = df
-            sig = ProgressiveSpiker(df_filt).get_signals()
+            sig = get_cached_signals(df_filt)
             if len(sig) > 0:
                 st.success(f"Found {len(sig)} signals - Checking first 5...")
                 
@@ -421,7 +435,7 @@ elif page == "Watchlist":
 
 
             if os.path.exists(LIVE_FILE):
-                df = pd.read_csv(LIVE_FILE)
+                df = load_live_data(LIVE_FILE)
                 wm.auto_update_prices(df)
                 wm = WatchlistManager()  # Reload after update
             
