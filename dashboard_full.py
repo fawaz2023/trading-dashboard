@@ -385,11 +385,15 @@ elif page == "Institutional Signals":
     if os.path.exists(RANKED_FILE):
         df_inst = pd.read_csv(RANKED_FILE)
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             time_filter = st.radio("Timeframe", ["All Active (10 Days)", "Today Only"], horizontal=True)
         with col2:
             min_score = st.selectbox("Min Score", [0, 1, 2, 3], index=2, help="Filter by minimum COMBINED_SCORE (0-3 scale based on Binary Option C)")
+        with col3:
+            search_query = st.text_input("Search Symbol", "").upper()
+        with col4:
+            exchange_filter = st.selectbox("Exchange", ["ALL", "NSE", "BSE"])
             
         if time_filter == "Today Only":
             df_inst["DATE"] = pd.to_datetime(df_inst["DATE"], errors="coerce")
@@ -398,6 +402,14 @@ elif page == "Institutional Signals":
             
         # Apply min score filter
         df_inst = df_inst[df_inst["COMBINED_SCORE"] >= min_score]
+        
+        # Apply search filter
+        if search_query:
+            df_inst = df_inst[df_inst["SYMBOL"].str.contains(search_query, na=False)]
+            
+        # Apply exchange filter
+        if exchange_filter != "ALL":
+            df_inst = df_inst[df_inst["EXCHANGE"] == exchange_filter]
             
         if len(df_inst) > 0:
             st.success(f"Displaying {len(df_inst)} ranked signals (Min Score >= {min_score})")
