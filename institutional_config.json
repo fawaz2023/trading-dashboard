@@ -1,0 +1,38 @@
+{
+    "validation_timestamp": "2026-07-27T13:18:05.949502",
+    "status": "VALID",
+    "inputs": {
+        "combined_live": "data/combined_dashboard_live.csv",
+        "signal_history": "data/signal_scores_history.csv"
+    },
+    "mappings": {
+        "combined": {
+            "date": "DATE",
+            "symbol": "SYMBOL",
+            "exchange": "EXCHANGE",
+            "close": "CLOSE",
+            "deliv_per": "DELIV_PER",
+            "deliv_turnover": "DELIVERY_TURNOVER",
+            "atw": "ATW"
+        },
+        "nse_bhav": {
+            "symbol_col": "SYMBOL",
+            "series_col": "SERIES",
+            "close_col": "CLOSE"
+        },
+        "nse_delivery": {
+            "symbol_col": "SYMBOL",
+            "deliv_per_col": "DELIV_PER"
+        },
+        "bse_bhav": {
+            "symbol_col": "TICKER",
+            "scrip_code": "SC_CODE",
+            "close_col": "CLOSE"
+        },
+        "bse_delivery": {
+            "symbol_col": "TICKER",
+            "scrip_code": "SC_CODE",
+            "deliv_per_col": "DELIVERY_PER"
+        }
+    }
+}

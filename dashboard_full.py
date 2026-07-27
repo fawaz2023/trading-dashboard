@@ -78,7 +78,7 @@ def log_signal_to_history(symbol, exchange, close, deliv_per, momentum_score):
 def metric(label, value):
     st.markdown(f"<div class='card metric'><div class='label'>{label}</div><div class='value'>{value}</div></div>", unsafe_allow_html=True)
 
-page = st.sidebar.radio("Navigation", ["Dashboard", "Data Health", "Signals", "Verify Conditions", "Watchlist", "Win Rate"])
+page = st.sidebar.radio("Navigation", ["Dashboard", "Data Health", "Signals", "Institutional Signals", "Verify Conditions", "Watchlist", "Win Rate"])
 st.sidebar.divider()
 exclude_t2t = st.sidebar.checkbox("🚫 Hide 100% Delivery (T2T)", value=True)
 
@@ -376,6 +376,31 @@ elif page == "Signals":
             st.warning("No signals found today")
     else:
         st.info("No data available. Run auto_update_smart.py first.")
+
+# INSTITUTIONAL SIGNALS
+elif page == "Institutional Signals":
+    st.markdown("<div class='section'>Institutional Signals (Ranked)</div>", unsafe_allow_html=True)
+    
+    RANKED_FILE = "data/active_signals_ranked.csv"
+    if os.path.exists(RANKED_FILE):
+        df_inst = pd.read_csv(RANKED_FILE)
+        
+        time_filter = st.radio("Timeframe", ["All Active (10 Days)", "Today Only"], horizontal=True)
+        
+        if time_filter == "Today Only":
+            df_inst["DATE"] = pd.to_datetime(df_inst["DATE"], errors="coerce")
+            max_date = df_inst["DATE"].max()
+            df_inst = df_inst[df_inst["DATE"] == max_date]
+            
+        if len(df_inst) > 0:
+            st.success(f"Displaying {len(df_inst)} ranked signals")
+            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "COMBINED_SCORE", "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE", "DELIV_PER", "ATW"]
+            avail_cols = [c for c in display_cols if c in df_inst.columns]
+            st.dataframe(df_inst[avail_cols], use_container_width=True, height=600)
+        else:
+            st.info("No signals match the selected timeframe.")
+    else:
+        st.warning("⚠️ No ranked signals found. Run the pipeline.")
 
 # VERIFY CONDITIONS
 elif page == "Verify Conditions":

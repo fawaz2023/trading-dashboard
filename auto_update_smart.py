@@ -567,5 +567,17 @@ print(f"  Dashboard (LIVE): {dashboard_file}")
 print(f"  Legacy (Backtest): {Config.COMBINED_FILE}")
 print("="*70)
 
+print("Calculating institutional metrics...")
+try:
+    import subprocess
+    result = subprocess.run(["python", "calculate_active_signals.py"],
+                             timeout=300, capture_output=True, text=True)
+    if result.returncode == 0:
+        print("Institutional metrics calculated successfully")
+    else:
+        print(f"Institutional metrics had errors (non-critical): {result.stderr[:200]}")
+except Exception as e:
+    print(f"Institutional metrics failed (non-critical): {e}")
+
 import sys
 sys.exit(0)
