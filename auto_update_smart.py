@@ -5,7 +5,7 @@ import requests
 import zipfile
 from datetime import datetime, timedelta
 from nse_downloader_fixed_nov2025 import NSEDownloaderFixed
-from bse_downloader_working import BSEDownloaderWorking
+from bse_downloader_working import BSEDownloaderWorking, normalize_bse_delivery, merge_bse_bhav_delivery
 from config import Config
 
 pd.options.mode.chained_assignment = None
@@ -76,57 +76,11 @@ def backfill_missing_dates(missing_dates):
 
 
             # v4 FIX: Download BSE Delivery with proper DATE injection
-            bse_deliv_ok = False
-            try:
-                y = date_obj.year
-                ddmm = date_obj.strftime("%d%m")
-                url = f"https://www.bseindia.com/BSEDATA/gross/{y}/SCBSEALL{ddmm}.zip"
-
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Referer': 'https://www.bseindia.com/',
-                }
-
-                r = requests.get(url, timeout=20, verify=False, headers=headers)
-                if r.status_code == 200:
-                    zip_path = f"data/temp_bse_del_{ddmm}.zip"
-                    with open(zip_path, "wb") as f:
-                        f.write(r.content)
-                    with zipfile.ZipFile(zip_path, "r") as z:
-                        z.extractall("data/")
-                    txts = glob.glob(f"data/SCBSEALL{ddmm}.TXT")
-                    if txts:
-                        out_date = date_obj.strftime("%Y%m%d")
-                        df_bse_del = pd.read_csv(txts[0], delimiter="|", dtype=str, encoding="utf-8-sig")
-                        # Strip whitespace from headers (BSE landmine)
-                        df_bse_del.columns = df_bse_del.columns.str.strip()
-
-                        # Normalize column names
-                        ren = {
-                            "SCRIP CODE": "SYMBOL",
-                            "SECURITY_CODE": "SYMBOL",
-                            "DELV. PER.": "DELIV_PER",
-                            "DELIV. PER.": "DELIV_PER",
-                            "DELIVERY QTY": "DELIV_QTY",
-                            "DELIV QTY": "DELIV_QTY",
-                        }
-                        df_bse_del.rename(columns=ren, inplace=True)
-
-                        # CRITICAL v4 FIX: Inject DATE from trading date
-                        df_bse_del["DATE"] = date_obj.strftime("%d%m%Y")
-
-                        # Keep only needed columns (DATE now guaranteed to exist)
-                        df_bse_del = df_bse_del[["DATE", "SYMBOL", "DELIV_QTY", "DELIV_PER"]].copy()
-                        df_bse_del.to_csv(f"data/bse_delivery_{out_date}.csv", index=False)
-                        bse_deliv_ok = True
-
-                        # cleanup
-                        if os.path.exists(zip_path): os.remove(zip_path)
-                        for t in txts:
-                            if os.path.exists(t): os.remove(t)
-            except Exception as e:
-                print(f"  ⚠️  BSE delivery backfill error: {e}")
+            out_date = date_obj.strftime("%Y%m%d")
+            df_bse_del, bse_deliv_ok = bse_downloader.download_bse_delivery(date_obj)
+            if bse_deliv_ok and df_bse_del is not None:
+                # The helper normalizes and sets DATE=YYYYMMDD
+                df_bse_del.to_csv(f"data/bse_delivery_{out_date}.csv", index=False)
 
             print(f"  ✅ NSE + BSE{'+ Delivery' if bse_deliv_ok else ''} downloaded")
         except Exception as e:
@@ -193,25 +147,6 @@ def normalize_nse_bhav(df, date):
     df = ensure_cols(df, {"ISIN": None, "SYMBOL": None})
     return df
 
-def normalize_bse_delivery(df_deliv):
-    """Standardize BSE delivery column names"""
-    # Map various BSE delivery formats to standard names
-    ren = {
-        "SCRIP CODE": "SYMBOL",
-        "SECURITY_CODE": "SYMBOL",
-        "SCRIP_CODE": "SYMBOL",
-        "DELV. PER.": "DELIV_PER",
-        "DELIV. PER.": "DELIV_PER",
-        "DELIVERY QTY": "DELIV_QTY",
-        "DELIV ": "DELIV_QTY",
-        " DELIV_QTY": "DELIV_QTY",
-        " DELIV_PER": "DELIV_PER",
-    }
-    df_deliv.rename(columns=ren, inplace=True)
-    df_deliv = ensure_cols(df_deliv, {"DELIV_PER": 0, "DELIV_QTY": 0, "SYMBOL": None})
-    df_deliv["DELIV_QTY"] = to_num(df_deliv["DELIV_QTY"]).fillna(0)
-    df_deliv["DELIV_PER"] = to_num(df_deliv["DELIV_PER"]).fillna(0)
-    return df_deliv
 
 # Run backfill check
 print(f"{'='*70}")
@@ -268,58 +203,11 @@ if start_date <= end_date:
         _, ok_bse, _ = bse_downloader.download_bse_bhav(cur)
 
         # v4 FIX: BSE delivery with proper DATE injection
-        bse_deliv_ok = False
-        try:
-            y = cur.year
-            ddmm = cur.strftime("%d%m")
-            url = f"https://www.bseindia.com/BSEDATA/gross/{y}/SCBSEALL{ddmm}.zip"
-
-            # Browser headers to bypass BSE's 403 blocking
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Referer': 'https://www.bseindia.com/',
-            }
-
-            r = requests.get(url, timeout=20, verify=False, headers=headers)
-            if r.status_code == 200:
-                zip_path = f"data/temp_bse_del_{ddmm}.zip"
-                with open(zip_path, "wb") as f:
-                    f.write(r.content)
-                with zipfile.ZipFile(zip_path, "r") as z:
-                    z.extractall("data/")
-                txts = glob.glob(f"data/SCBSEALL{ddmm}.TXT")
-                if txts:
-                    out_date = cur.strftime("%Y%m%d")
-                    df_bse_del = pd.read_csv(txts[0], delimiter="|", dtype=str, encoding="utf-8-sig")
-                    # Strip whitespace from headers (BSE landmine)
-                    df_bse_del.columns = df_bse_del.columns.str.strip()
-
-                    # Normalize column names
-                    ren = {
-                        "SCRIP CODE": "SYMBOL",
-                        "SECURITY_CODE": "SYMBOL",
-                        "DELV. PER.": "DELIV_PER",
-                        "DELIV. PER.": "DELIV_PER",
-                        "DELIVERY QTY": "DELIV_QTY",
-                        "DELIV QTY": "DELIV_QTY",
-                    }
-                    df_bse_del.rename(columns=ren, inplace=True)
-
-                    # CRITICAL v4 FIX: Inject DATE from trading date (cur)
-                    df_bse_del["DATE"] = cur.strftime("%d%m%Y")  # Match BSE DDMMYYYY format
-
-                    # Keep only needed columns (DATE now guaranteed to exist)
-                    df_bse_del = df_bse_del[["DATE", "SYMBOL", "DELIV_QTY", "DELIV_PER"]].copy()
-                    df_bse_del.to_csv(f"data/bse_delivery_{out_date}.csv", index=False)
-                    bse_deliv_ok = True
-
-                    # cleanup
-                    if os.path.exists(zip_path): os.remove(zip_path)
-                    for t in txts:
-                        if os.path.exists(t): os.remove(t)
-        except Exception as e:
-            print(f"\n  ⚠️  BSE delivery error: {e}")
+        out_date = cur.strftime("%Y%m%d")
+        df_bse_del, bse_deliv_ok = bse_downloader.download_bse_delivery(cur)
+        if bse_deliv_ok and df_bse_del is not None:
+            # The helper normalizes and sets DATE=YYYYMMDD
+            df_bse_del.to_csv(f"data/bse_delivery_{out_date}.csv", index=False)
 
         if ok_bhav:
             msg = "✅ NSE"
@@ -455,86 +343,8 @@ else:
 # -------------------------------
 # Step 7: Merge delivery into BSE
 # -------------------------------
-def merge_bse_day(bhav_all, deliv_all):
-    """Merge BSE delivery into BSE bhav.
-    bhav_all: normalized BSE bhav (has FinInstrmId, ISIN, SYMBOL, DATE, CLOSE, etc.)
-    deliv_all: BSE delivery (has DATE, SYMBOL (BSE code), DELIV_QTY, DELIV_PER)
-    """
-    if bhav_all.empty:
-        return bhav_all
-    if deliv_all.empty:
-        return ensure_cols(bhav_all, {"DELIV_PER": 0, "DELIV_QTY": 0})
-
-    out = bhav_all.copy()
-    deliv_all = deliv_all.copy()
-
-    # Standardize delivery column names
-    ren = {
-        "DELIV. PER.": "DELIV_PER",
-        "DELIVERY QTY": "DELIV_QTY",
-        "DELIV ": "DELIV_QTY",
-        " DELIV_QTY": "DELIV_QTY",
-        " DELIV_PER": "DELIV_PER",
-    }
-    deliv_all.rename(columns=ren, inplace=True)
-    deliv_all = ensure_cols(deliv_all, {"DELIV_PER": 0, "DELIV_QTY": 0})
-    deliv_all["DELIV_QTY"] = pd.to_numeric(deliv_all["DELIV_QTY"], errors="coerce").fillna(0)
-    deliv_all["DELIV_PER"] = pd.to_numeric(deliv_all["DELIV_PER"], errors="coerce").fillna(0)
-
-    # Normalize DATE on both sides
-    if "DATE" in out.columns:
-        if out["DATE"].dtype in ['int64', 'int32']:
-            # Try DDMMYYYY first, fallback to YYYYMMDD
-            out["DATE"] = pd.to_datetime(out["DATE"].astype(str), format="%d%m%Y", errors="coerce")
-            if out["DATE"].isna().all():
-                out["DATE"] = pd.to_datetime(out["DATE"].astype(str), format="%Y%m%d", errors="coerce")
-        else:
-            out["DATE"] = pd.to_datetime(out["DATE"], errors="coerce")
-    if "DATE" in deliv_all.columns:
-        if deliv_all["DATE"].dtype in ['int64', 'int32']:
-            # Try DDMMYYYY first (new v4 format), fallback to YYYYMMDD (old format)
-            deliv_all["DATE"] = pd.to_datetime(deliv_all["DATE"].astype(str), format="%d%m%Y", errors="coerce")
-            if deliv_all["DATE"].isna().all():
-                deliv_all["DATE"] = pd.to_datetime(deliv_all["DATE"].astype(str), format="%Y%m%d", errors="coerce")
-        else:
-            deliv_all["DATE"] = pd.to_datetime(deliv_all["DATE"], errors="coerce")
-
-    # BSE join: bhav.FinInstrmId = delivery.SYMBOL (numeric code)
-    if "FinInstrmId" in out.columns and "SYMBOL" in deliv_all.columns:
-        deliv_all = deliv_all.rename(columns={"SYMBOL": "FinInstrmId"})
-
-    # Coerce join key to string
-    key = "FinInstrmId"
-    if key not in out.columns or key not in deliv_all.columns:
-        return ensure_cols(out, {"DELIV_PER": 0, "DELIV_QTY": 0})
-
-    out[key] = out[key].astype(str)
-    deliv_all[key] = deliv_all[key].astype(str)
-
-    cols_keep = [c for c in [key, "DATE", "DELIV_PER", "DELIV_QTY"] if c in deliv_all.columns]
-    out = out.merge(
-        deliv_all[cols_keep],
-        on=[key, "DATE"],
-        how="left",
-        suffixes=("", "_del")
-    )
-
-    # Consolidate delivery columns
-    if "DELIV_PER_del" in out.columns:
-        out["DELIV_PER"] = out["DELIV_PER"].fillna(out["DELIV_PER_del"])
-        out.drop(columns=["DELIV_PER_del"], inplace=True)
-    if "DELIV_QTY_del" in out.columns:
-        out["DELIV_QTY"] = out["DELIV_QTY"].fillna(out["DELIV_QTY_del"])
-        out.drop(columns=["DELIV_QTY_del"], inplace=True)
-
-    out = ensure_cols(out, {"DELIV_PER": 0, "DELIV_QTY": 0})
-    out["DELIV_PER"] = pd.to_numeric(out["DELIV_PER"], errors="coerce").fillna(0)
-    out["DELIV_QTY"] = pd.to_numeric(out["DELIV_QTY"], errors="coerce").fillna(0)
-
-    return out
-
 print("\n🔀 Merging BSE delivery data...")
-df_bse = merge_bse_day(df_bse, df_bse_deliv)
+df_bse = merge_bse_bhav_delivery(df_bse, df_bse_deliv)
 bse_merged_count = len(df_bse[df_bse["DELIV_PER"] > 0])
 print(f"✅ BSE stocks with delivery data merged: {bse_merged_count}/{len(df_bse)}")
 

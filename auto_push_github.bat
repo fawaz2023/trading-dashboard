@@ -18,6 +18,7 @@ echo.
 REM ===== STEP 1: Download NSE + BSE Data =====
 echo [1/4] Downloading NSE + BSE data...
 echo ----------------------------------------------------------------------
+set PYTHONIOENCODING=utf-8
 python auto_update_smart.py
 
 REM Check if download was successful (errorlevel 0 = success)
@@ -42,7 +43,7 @@ echo [2/4] Staging files and checking for changes...
 echo ----------------------------------------------------------------------
 
 REM Stage all trackable output files FIRST, then diff the index
-git add data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv auto_update_smart.py auto_push_github.bat progressive_screener.py dashboard_full.py config.py nse_downloader_fixed_nov2025.py rebuild_data.py
+git add data/combined_2years.csv data/signal_history.csv data/dashboard_cloud.csv auto_update_smart.py auto_push_github.bat progressive_screener.py dashboard_full.py config.py nse_downloader_fixed_nov2025.py rebuild_data.py bse_downloader_working.py
 
 REM Check if staging produced any diff vs last commit
 git diff --cached --quiet
@@ -145,7 +146,7 @@ echo End Time: %date% %time%
 echo ======================================================================
 echo.
 echo Press any key to close...
-pause > nul
+REM pause removed for Task Scheduler compatibility
 exit /b 0
 
 endlocal
