@@ -469,16 +469,19 @@ if "ISIN" in df_all.columns:
 if "SYMBOL" in df_all.columns:
     before = len(df_all)
     bond_patterns = [
-        r'^GS\d',
-        r'^\d{3,4}GS\d',
-        r'^\d{3,4}[A-Z]{2,4}\d{2,4}[A-Z]?$',
-        r'^SGB',
-        r'\d+TB',
-        r'SDL',
-        r'MHSDL',
-        r'PP$',
-        r'^CS\d',
-        r'^EELZ',
+        r'^GS\d',                           # Government Securities: GS15MAR34C
+        r'^\d{3,4}GS\d',                    # G-Secs: 723GS39P, 824GS2027
+        r'^\d{3,4}[A-Z]{2,4}\d{2,4}[A-Z]?$', # ALL bonds: 754SBI38, 781IHFCL28
+        r'^SGB',                            # Sovereign Gold Bonds
+        r'\d+TB$',                          # Treasury Bills
+        r'SDL',                             # State Development Loans
+        r'MHSDL',                           # Maharashtra SDL
+        r'^\d{2,}[A-Z]+\d{2,}[A-Z]*$',      # G-Secs, SDLs, T-Bills (e.g. 75GS2034, 182T101025)
+        r'^[A-Z]+\d{4,}[A-Z]*$',            # Corp bonds with full dates (e.g. ICLF160525)
+        r'ZC\d{2,}',                        # Zero coupon bonds (e.g. JFCZC28)
+        r'PP$',                             # Preference Shares
+        r'^CS\d',                           # Convertible Securities
+        r'^EELZ',                           # EELZ T2T exception
     ]
     pattern = '|'.join(bond_patterns)
     df_all = df_all[~df_all["SYMBOL"].str.contains(pattern, regex=True, na=False, case=False)].copy()
