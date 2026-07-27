@@ -385,20 +385,27 @@ elif page == "Institutional Signals":
     if os.path.exists(RANKED_FILE):
         df_inst = pd.read_csv(RANKED_FILE)
         
-        time_filter = st.radio("Timeframe", ["All Active (10 Days)", "Today Only"], horizontal=True)
-        
+        col1, col2 = st.columns(2)
+        with col1:
+            time_filter = st.radio("Timeframe", ["All Active (10 Days)", "Today Only"], horizontal=True)
+        with col2:
+            min_score = st.selectbox("Min Score", [0, 1, 2, 3], index=2, help="Filter by minimum COMBINED_SCORE (0-3 scale based on Binary Option C)")
+            
         if time_filter == "Today Only":
             df_inst["DATE"] = pd.to_datetime(df_inst["DATE"], errors="coerce")
             max_date = df_inst["DATE"].max()
             df_inst = df_inst[df_inst["DATE"] == max_date]
             
+        # Apply min score filter
+        df_inst = df_inst[df_inst["COMBINED_SCORE"] >= min_score]
+            
         if len(df_inst) > 0:
-            st.success(f"Displaying {len(df_inst)} ranked signals")
+            st.success(f"Displaying {len(df_inst)} ranked signals (Min Score >= {min_score})")
             display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "COMBINED_SCORE", "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE", "DELIV_PER", "ATW"]
             avail_cols = [c for c in display_cols if c in df_inst.columns]
             st.dataframe(df_inst[avail_cols], use_container_width=True, height=600)
         else:
-            st.info("No signals match the selected timeframe.")
+            st.info(f"No signals match the selected timeframe and Min Score >= {min_score}.")
     else:
         st.warning("⚠️ No ranked signals found. Run the pipeline.")
 
