@@ -15,7 +15,7 @@ def load_live_data(filepath):
         return df
     return None
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_cached_signals(df_filt):
     from progressive_screener import ProgressiveSpiker
     return ProgressiveSpiker(df_filt).get_signals()
