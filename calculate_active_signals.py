@@ -44,10 +44,7 @@ def run_scoring():
     from progressive_screener import ProgressiveSpiker
     
     all_scored = []
-    
-    # Filter out 100% delivery (T2T) before processing if needed
-    if "EVER_100_DELIV" in df.columns:
-        df = df[df["EVER_100_DELIV"] == False]
+    all_t2t_scored = []
     
     for dt in sorted(df["DATE"].dropna().unique()):
         day_df = df[df["DATE"] == dt].copy()
@@ -60,61 +57,95 @@ def run_scoring():
             continue
 
         scored_df["DATE"] = pd.to_datetime(scored_df["DATE"], errors="coerce")
-        all_scored.append(scored_df)
+        
+        if "EVER_100_DELIV" in scored_df.columns:
+            t2t_mask = scored_df["EVER_100_DELIV"] == True
+            t2t_df = scored_df[t2t_mask].copy()
+            clean_df = scored_df[~t2t_mask].copy()
+            
+            if not clean_df.empty:
+                all_scored.append(clean_df)
+            if not t2t_df.empty:
+                all_t2t_scored.append(t2t_df)
+        else:
+            all_scored.append(scored_df)
 
-    if not all_scored:
+    if not all_scored and not all_t2t_scored:
         print(f"Loaded 0 signals from {INPUT_FILE}")
         print("active_signals_ranked.csv saved: 0 rows")
         sys.exit(0)
         
-    scored_df = pd.concat(all_scored, ignore_index=True)
-    print(f"Scored {len(scored_df)} stocks (binary confluence) across {scored_df['DATE'].nunique()} dates")
-    
-    # Save feature store (optional backup append)
-    if os.path.exists(FEATURE_OUT):
-        scored_df.to_csv(FEATURE_OUT, mode='a', header=False, index=False)
-    else:
-        scored_df.to_csv(FEATURE_OUT, index=False)
-    print("signal_feature_store.csv appended")
-    
-    history_path = "data/signal_scores_history.csv"
-    active_path = "data/active_signals_ranked.csv"
-    today_path = "data/signal_scores_today.csv"
+    if all_scored:
+        scored_df = pd.concat(all_scored, ignore_index=True)
+        print(f"Scored {len(scored_df)} stocks (binary confluence) across {scored_df['DATE'].nunique()} dates")
+        
+        # Save feature store (optional backup append)
+        if os.path.exists(FEATURE_OUT):
+            scored_df.to_csv(FEATURE_OUT, mode='a', header=False, index=False)
+        else:
+            scored_df.to_csv(FEATURE_OUT, index=False)
+        print("signal_feature_store.csv appended")
+        
+        history_path = "data/signal_scores_history.csv"
+        active_path = "data/active_signals_ranked.csv"
+        today_path = "data/signal_scores_today.csv"
 
-    keep_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "DELIV_PER", "ATW", 
-                 "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE", "COMBINED_SCORE",
-                 "HASMOMENTUMDATA", "HASFOOTPRINTDATA", "HASSTABILITYHISTORY20D"]
+        keep_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "DELIV_PER", "ATW", 
+                     "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE", "COMBINED_SCORE",
+                     "HASMOMENTUMDATA", "HASFOOTPRINTDATA", "HASSTABILITYHISTORY20D"]
+        
+        # Filter columns
+        hist = scored_df[keep_cols].copy()
+        
+        if not BACKFILL_MODE:
+            # Standard daily append mode
+            if os.path.exists(history_path):
+                old_hist = pd.read_csv(history_path)
+                old_hist["DATE"] = pd.to_datetime(old_hist["DATE"], errors="coerce")
+                hist = pd.concat([old_hist, hist], ignore_index=True)
+                
+        hist = hist.dropna(subset=["DATE", "SYMBOL", "EXCHANGE"])
+        hist = hist.drop_duplicates(subset=["DATE", "SYMBOL", "EXCHANGE"], keep="last")
+        hist = hist.sort_values(["DATE", "COMBINED_SCORE", "SYMBOL"], ascending=[False, False, True])
+        hist.to_csv(history_path, index=False)
+        
+        max_date = hist["DATE"].max()
+        cutoff = max_date - pd.Timedelta(days=14)
+        
+        active = hist[hist["DATE"] >= cutoff].copy()
+        active = active.drop_duplicates(subset=["DATE", "SYMBOL", "EXCHANGE"], keep="last")
+        active = active.sort_values(["COMBINED_SCORE", "DATE", "SYMBOL"], ascending=[False, False, True])
+        active.to_csv(active_path, index=False)
+        
+        today_scores = hist[hist["DATE"] == max_date].copy()
+        today_scores = today_scores.sort_values(["COMBINED_SCORE", "SYMBOL"], ascending=[False, True])
+        today_scores.to_csv(today_path, index=False)
+        
+        print(f"signal_scores_history.csv saved: {len(hist)} rows")
+        print(f"active_signals_ranked.csv saved: {len(active)} rows")
+        print(f"signal_scores_today.csv saved: {len(today_scores)} rows")
+    else:
+        keep_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "DELIV_PER", "ATW", 
+                     "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE", "COMBINED_SCORE",
+                     "HASMOMENTUMDATA", "HASFOOTPRINTDATA", "HASSTABILITYHISTORY20D"]
+        print("No clean signals to save today.")
     
-    # Filter columns
-    hist = scored_df[keep_cols].copy()
-    
-    if not BACKFILL_MODE:
-        # Standard daily append mode
-        if os.path.exists(history_path):
-            old_hist = pd.read_csv(history_path)
-            old_hist["DATE"] = pd.to_datetime(old_hist["DATE"], errors="coerce")
-            hist = pd.concat([old_hist, hist], ignore_index=True)
+    # Process and save T2T rejected signals for ML training
+    if all_t2t_scored:
+        t2t_df = pd.concat(all_t2t_scored, ignore_index=True)
+        t2t_path = "data/t2t_rejected_signals_history.csv"
+        
+        t2t_hist = t2t_df[keep_cols].copy()
+        if not BACKFILL_MODE and os.path.exists(t2t_path):
+            old_t2t = pd.read_csv(t2t_path)
+            old_t2t["DATE"] = pd.to_datetime(old_t2t["DATE"], errors="coerce")
+            t2t_hist = pd.concat([old_t2t, t2t_hist], ignore_index=True)
             
-    hist = hist.dropna(subset=["DATE", "SYMBOL", "EXCHANGE"])
-    hist = hist.drop_duplicates(subset=["DATE", "SYMBOL", "EXCHANGE"], keep="last")
-    hist = hist.sort_values(["DATE", "COMBINED_SCORE", "SYMBOL"], ascending=[False, False, True])
-    hist.to_csv(history_path, index=False)
-    
-    max_date = hist["DATE"].max()
-    cutoff = max_date - pd.Timedelta(days=14)
-    
-    active = hist[hist["DATE"] >= cutoff].copy()
-    active = active.drop_duplicates(subset=["DATE", "SYMBOL", "EXCHANGE"], keep="last")
-    active = active.sort_values(["COMBINED_SCORE", "DATE", "SYMBOL"], ascending=[False, False, True])
-    active.to_csv(active_path, index=False)
-    
-    today_scores = hist[hist["DATE"] == max_date].copy()
-    today_scores = today_scores.sort_values(["COMBINED_SCORE", "SYMBOL"], ascending=[False, True])
-    today_scores.to_csv(today_path, index=False)
-    
-    print(f"signal_scores_history.csv saved: {len(hist)} rows")
-    print(f"active_signals_ranked.csv saved: {len(active)} rows")
-    print(f"signal_scores_today.csv saved: {len(today_scores)} rows")
+        t2t_hist = t2t_hist.dropna(subset=["DATE", "SYMBOL", "EXCHANGE"])
+        t2t_hist = t2t_hist.drop_duplicates(subset=["DATE", "SYMBOL", "EXCHANGE"], keep="last")
+        t2t_hist = t2t_hist.sort_values(["DATE", "COMBINED_SCORE", "SYMBOL"], ascending=[False, False, True])
+        t2t_hist.to_csv(t2t_path, index=False)
+        print(f"t2t_rejected_signals_history.csv saved: {len(t2t_hist)} rows")
 
 if __name__ == "__main__":
     run_scoring()
