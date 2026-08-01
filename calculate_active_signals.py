@@ -5,7 +5,7 @@ import sys
 from datetime import datetime, timedelta
 from config import Config
 
-BACKFILL_MODE = False
+BACKFILL_MODE = True
 INPUT_FILE = Config.COMBINED_FILE if BACKFILL_MODE else "data/combined_dashboard_live.csv"
 
 CONFIG_FILE = "institutional_config.json"
