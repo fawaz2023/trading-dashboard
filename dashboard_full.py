@@ -392,6 +392,15 @@ elif page == "Signals":
 elif page == "Institutional Signals":
     st.markdown("<div class='section'>Institutional Signals (Rolling 30 Days)</div>", unsafe_allow_html=True)
     
+    with st.expander("🤖 How to read these scores (Machine Learning Insights)"):
+        st.markdown("""
+        **The ML Edge (Based on past 30 days of performance):**
+        * **STABILITY_RAW:** Measures block order size vs the 3-month average. **> 3.16 is the golden threshold.** 
+        * **TRIGGER_COUNT_30D:** **1 is good** (Fresh Accumulation). 3+ is bad (Distribution Trap).
+        * **AI_SCORE:** A percentile score (0.0 to 1.0) that heavily rewards massive block orders on fresh triggers.
+        * *Tip: If a stock has a high COMBINED_SCORE but a low AI_SCORE, it means it has high momentum but no real institutional block orders. Avoid it.*
+        """)
+    
     HIST_FILE = "data/active_signals_ranked.csv"
     if os.path.exists(HIST_FILE):
         df_hist = pd.read_csv(HIST_FILE)
