@@ -136,6 +136,11 @@ def run_scoring():
             0.2 * (1.0 / recent_pool["TRIGGER_COUNT_30D"])
         )
         
+        # Update the CLOSE price to today's live market price!
+        if "SYMBOL" in df.columns and "CLOSE" in df.columns:
+            latest_prices = df.set_index("SYMBOL")["CLOSE"].to_dict()
+            recent_pool["CLOSE"] = recent_pool["SYMBOL"].map(latest_prices).fillna(recent_pool["CLOSE"])
+        
         # Output artifacts for the dashboard
         active_path = "data/active_signals_ranked.csv"
         today_path = "data/signal_scores_today.csv"
