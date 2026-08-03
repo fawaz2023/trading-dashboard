@@ -445,7 +445,7 @@ if "SYMBOL" in df_all.columns:
     before = len(df_all)
     df_all = df_all[
         ~df_all["SYMBOL"].str.contains(
-            "ETF|LIQUID|FUND|INDEX|NIFTY|SENSEX|GLOBE|BEES|HDFCPVTBAN",
+            "ETF|LIQUID|FUND|INDEX|NIFTY|SENSEX|GLOBE|BEES|HDFCPVTBAN|HDFCPSU|BANKPSU|MOMENTUM",
             case=False,
             na=False
         )
