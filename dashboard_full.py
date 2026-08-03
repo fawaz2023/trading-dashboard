@@ -441,10 +441,9 @@ elif page == "Institutional Signals":
             else:
                 st.success(f"Displaying {len(df_hist)} survivors for {date_filter}")
 
-            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "COMBINED_SCORE", 
-                            "MOMENTUM_SCORE", "MOMENTUM_RAW",
-                            "FOOTPRINT_SCORE", "FOOTPRINT_RAW",
-                            "STABILITY_SCORE", "STABILITY_RAW",
+            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", 
+                            "AI_SCORE", "COMBINED_SCORE", 
+                            "TRIGGER_COUNT_30D", "STABILITY_RAW", 
                             "DELIV_PER", "ATW"]
             avail_cols = [c for c in display_cols if c in df_hist.columns]
             
@@ -459,7 +458,7 @@ elif page == "Institutional Signals":
                 for raw_col in ["MOMENTUM_RAW", "FOOTPRINT_RAW", "STABILITY_RAW"]:
                     if raw_col in avail_cols:
                         format_dict[raw_col] = "{:.2f}"
-                for pct_col in ["COMBINED_SCORE", "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE"]:
+                for pct_col in ["COMBINED_SCORE", "AI_SCORE", "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE"]:
                     if pct_col in avail_cols:
                         format_dict[pct_col] = "{:.2f}"
                 if format_dict:

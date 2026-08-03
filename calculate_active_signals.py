@@ -127,6 +127,15 @@ def run_scoring():
         recent_pool["TRIGGER_COUNT_30D"] = recent_pool["SYMBOL"].map(trigger_counts)
         recent_pool["REPEAT_FLAG"] = recent_pool["TRIGGER_COUNT_30D"] > 1
         
+        # Calculate ML-Driven AI Score
+        # heavily weights STABILITY_SCORE (Block sizes) and fresh signals (1 / TRIGGER_COUNT)
+        recent_pool["AI_SCORE"] = (
+            0.6 * recent_pool["STABILITY_SCORE"] +
+            0.1 * recent_pool["MOMENTUM_SCORE"] +
+            0.1 * recent_pool["FOOTPRINT_SCORE"] +
+            0.2 * (1.0 / recent_pool["TRIGGER_COUNT_30D"])
+        )
+        
         # Output artifacts for the dashboard
         active_path = "data/active_signals_ranked.csv"
         today_path = "data/signal_scores_today.csv"
