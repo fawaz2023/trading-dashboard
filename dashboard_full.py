@@ -434,12 +434,10 @@ elif page == "Institutional Signals":
             df_hist = df_hist[df_hist["EXCHANGE"] == exchange_filter]
             
         if len(df_hist) > 0:
-            if exchange_filter == "ALL":
-                df_hist["EXCH_PRIORITY"] = df_hist["EXCHANGE"].apply(lambda x: 0 if x == "BSE" else 1)
-                df_hist = df_hist.sort_values(by=["DATE", "EXCH_PRIORITY", "COMBINED_SCORE"], ascending=[False, True, False])
+            if "AI_SCORE" in df_hist.columns:
+                df_hist = df_hist.sort_values(by=["AI_SCORE", "STABILITY_RAW"], ascending=[False, False])
             else:
-                df_hist = df_hist.sort_values(by=["DATE", "COMBINED_SCORE"], ascending=[False, False])
-            
+                df_hist = df_hist.sort_values(by=["COMBINED_SCORE"], ascending=[False])
             # Add repeat flags
             if "REPEAT_FLAG" in df_hist.columns and "TRIGGER_COUNT_30D" in df_hist.columns:
                 mask = df_hist["REPEAT_FLAG"] == True
