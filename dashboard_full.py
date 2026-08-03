@@ -75,6 +75,17 @@ def log_signal_to_history(symbol, exchange, close, deliv_per, momentum_score):
         f.write(f"{today},{symbol},{exchange},{close},{deliv_per:.2f},{momentum_score:.1f}\n")
 
 
+def style_actionable_band(val):
+    try:
+        v = float(val)
+        if 60 <= v <= 80:
+            return 'background-color: rgba(72, 187, 120, 0.3); color: #fff; font-weight: bold;'
+        elif v > 80:
+            return 'color: rgba(255, 255, 255, 0.3);'
+        return ''
+    except:
+        return ''
+
 def metric(label, value):
     st.markdown(f"<div class='card metric'><div class='label'>{label}</div><div class='value'>{value}</div></div>", unsafe_allow_html=True)
 
@@ -377,49 +388,90 @@ elif page == "Signals":
     else:
         st.info("No data available. Run auto_update_smart.py first.")
 
-# INSTITUTIONAL SIGNALS
+# INSTITUTIONAL SIGNALS (now powered by survivors_archive.csv)
 elif page == "Institutional Signals":
-    st.markdown("<div class='section'>Institutional Signals (Ranked)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section'>Institutional Signals (Rolling 30 Days)</div>", unsafe_allow_html=True)
     
-    RANKED_FILE = "data/active_signals_ranked.csv"
-    if os.path.exists(RANKED_FILE):
-        df_inst = pd.read_csv(RANKED_FILE)
+    HIST_FILE = "data/active_signals_ranked.csv"
+    if os.path.exists(HIST_FILE):
+        df_hist = pd.read_csv(HIST_FILE)
+        df_hist["DATE"] = pd.to_datetime(df_hist["DATE"], errors="coerce")
+        
+        # Summary metrics
+        c1, c2, c3 = st.columns(3)
+        with c1: metric("Total Survivors", f"{len(df_hist)}")
+        with c2: metric("Trading Days", f"{df_hist['DATE'].nunique()}")
+        with c3: metric("Unique Symbols", f"{df_hist['SYMBOL'].nunique()}")
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            time_filter = st.radio("Timeframe", ["All Active (10 Days)", "Today Only"], horizontal=True)
+            date_options = ["ALL"] + sorted([d.strftime("%Y-%m-%d") for d in df_hist["DATE"].dt.date.unique()], reverse=True)
+            date_filter = st.selectbox("Trading Date", date_options)
         with col2:
-            min_score = st.selectbox("Min Score", [0, 1, 2, 3], index=2, help="Filter by minimum COMBINED_SCORE (0-3 scale based on Binary Option C)")
+            min_score = st.slider("Min Combined Score", 0.0, 1.0, 0.0, 0.05, help="Filter by minimum COMBINED_SCORE (0-1 percentile)")
         with col3:
             search_query = st.text_input("Search Symbol", "").upper()
         with col4:
             exchange_filter = st.selectbox("Exchange", ["ALL", "NSE", "BSE"])
             
-        if time_filter == "Today Only":
-            df_inst["DATE"] = pd.to_datetime(df_inst["DATE"], errors="coerce")
-            max_date = df_inst["DATE"].max()
-            df_inst = df_inst[df_inst["DATE"] == max_date]
-            
-        # Apply min score filter
-        df_inst = df_inst[df_inst["COMBINED_SCORE"] >= min_score]
-        
-        # Apply search filter
+        # Apply filters
+        if date_filter != "ALL":
+            df_hist = df_hist[df_hist["DATE"].dt.strftime("%Y-%m-%d") == date_filter]
+        if "COMBINED_SCORE" in df_hist.columns:
+            df_hist = df_hist[df_hist["COMBINED_SCORE"] >= min_score]
         if search_query:
-            df_inst = df_inst[df_inst["SYMBOL"].str.contains(search_query, na=False)]
-            
-        # Apply exchange filter
+            df_hist = df_hist[df_hist["SYMBOL"].str.contains(search_query, na=False)]
         if exchange_filter != "ALL":
-            df_inst = df_inst[df_inst["EXCHANGE"] == exchange_filter]
+            df_hist = df_hist[df_hist["EXCHANGE"] == exchange_filter]
             
-        if len(df_inst) > 0:
-            st.success(f"Displaying {len(df_inst)} ranked signals (Min Score >= {min_score})")
-            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "COMBINED_SCORE", "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE", "DELIV_PER", "ATW"]
-            avail_cols = [c for c in display_cols if c in df_inst.columns]
-            st.dataframe(df_inst[avail_cols], use_container_width=True, height=600)
+        if len(df_hist) > 0:
+            if exchange_filter == "ALL":
+                df_hist["EXCH_PRIORITY"] = df_hist["EXCHANGE"].apply(lambda x: 0 if x == "BSE" else 1)
+                df_hist = df_hist.sort_values(by=["DATE", "EXCH_PRIORITY", "COMBINED_SCORE"], ascending=[False, True, False])
+            else:
+                df_hist = df_hist.sort_values(by=["DATE", "COMBINED_SCORE"], ascending=[False, False])
+            
+            # Add repeat flags
+            if "REPEAT_FLAG" in df_hist.columns and "TRIGGER_COUNT_30D" in df_hist.columns:
+                mask = df_hist["REPEAT_FLAG"] == True
+                df_hist.loc[mask, "SYMBOL"] = df_hist.loc[mask, "SYMBOL"] + " \U0001f525(" + df_hist.loc[mask, "TRIGGER_COUNT_30D"].astype(str) + ")"
+                
+            if date_filter == "ALL":
+                st.success(f"Displaying {len(df_hist)} survivors across all dates")
+            else:
+                st.success(f"Displaying {len(df_hist)} survivors for {date_filter}")
+
+            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "COMBINED_SCORE", 
+                            "MOMENTUM_SCORE", "MOMENTUM_RAW",
+                            "FOOTPRINT_SCORE", "FOOTPRINT_RAW",
+                            "STABILITY_SCORE", "STABILITY_RAW",
+                            "DELIV_PER", "ATW"]
+            avail_cols = [c for c in display_cols if c in df_hist.columns]
+            
+            # Reset index for clean sequential numbering
+            df_hist = df_hist.reset_index(drop=True)
+            
+            # Apply styling to DELIV_PER
+            if "DELIV_PER" in avail_cols:
+                styled_df = df_hist[avail_cols].style.map(style_actionable_band, subset=["DELIV_PER"])
+                
+                format_dict = {}
+                for raw_col in ["MOMENTUM_RAW", "FOOTPRINT_RAW", "STABILITY_RAW"]:
+                    if raw_col in avail_cols:
+                        format_dict[raw_col] = "{:.2f}"
+                for pct_col in ["COMBINED_SCORE", "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE"]:
+                    if pct_col in avail_cols:
+                        format_dict[pct_col] = "{:.2f}"
+                if format_dict:
+                    styled_df = styled_df.format(format_dict)
+                    
+                st.dataframe(styled_df, use_container_width=True, height=600)
+            else:
+                st.dataframe(df_hist[avail_cols], use_container_width=True, height=600)
         else:
-            st.info(f"No signals match the selected timeframe and Min Score >= {min_score}.")
+            st.info(f"No signals match the selected filters.")
     else:
-        st.warning("⚠️ No ranked signals found. Run the pipeline.")
+        st.warning("⚠️ No survivor archive found. Run calculate_active_signals.py.")
 
 # VERIFY CONDITIONS
 elif page == "Verify Conditions":

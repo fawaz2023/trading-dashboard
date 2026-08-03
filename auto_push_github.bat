@@ -19,6 +19,7 @@ REM ===== STEP 1: Download NSE + BSE Data =====
 echo [1/4] Downloading NSE + BSE data...
 echo ----------------------------------------------------------------------
 set PYTHONIOENCODING=utf-8
+set PYTHONUTF8=1
 python auto_update_smart.py
 
 REM Check if download was successful (errorlevel 0 = success)
