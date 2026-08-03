@@ -473,9 +473,9 @@ elif page == "Institutional Signals":
                 if format_dict:
                     styled_df = styled_df.format(format_dict)
                     
-                st.dataframe(styled_df, use_container_width=True, height=600)
+                st.dataframe(styled_df, use_container_width=True, height=600, hide_index=True)
             else:
-                st.dataframe(df_hist[avail_cols], use_container_width=True, height=600)
+                st.dataframe(df_hist[avail_cols], use_container_width=True, height=600, hide_index=True)
         else:
             st.info(f"No signals match the selected filters.")
     else:
