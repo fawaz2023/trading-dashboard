@@ -186,11 +186,11 @@ elif page == "Data Health":
     # 1. Status Matrix (Top Row)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric(label="📈 NSE Bhavcopy", value="🟢 Synced", delta=f"{latest_date_str}", delta_color="off")
+        st.metric(label="📈 NSE Bhavcopy", value=f"{latest_date_str}", delta="🟢 Synced", delta_color="off")
     with col2:
-        st.metric(label="📦 NSE Delivery", value="🟢 Synced", delta=f"{latest_date_str}", delta_color="off")
+        st.metric(label="📦 NSE Delivery", value=f"{latest_date_str}", delta="🟢 Synced", delta_color="off")
     with col3:
-        st.metric(label="🏦 BSE Data", value="🟢 Synced", delta=f"{latest_date_str}", delta_color="off")
+        st.metric(label="🏦 BSE Data", value=f"{latest_date_str}", delta="🟢 Synced", delta_color="off")
     with col4:
         st.metric(label="🌐 Total Universe", value=f"{total_count:,}", delta=f"{nse_count:,} NSE / {bse_count:,} BSE", delta_color="off")
         
