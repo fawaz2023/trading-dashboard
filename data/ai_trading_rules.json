@@ -1,0 +1,35 @@
+{
+    "feature_importance": [
+        {
+            "Feature": "STABILITY_RAW",
+            "Importance_Mean": 0.048419218778653975,
+            "Importance_Std": 0.05567545575019598
+        },
+        {
+            "Feature": "TRIGGER_COUNT_30D",
+            "Importance_Mean": 0.022962851102386016,
+            "Importance_Std": 0.025379354018754956
+        },
+        {
+            "Feature": "FOOTPRINT_RAW",
+            "Importance_Mean": -0.010087586831772855,
+            "Importance_Std": 0.035113680488110616
+        },
+        {
+            "Feature": "MOMENTUM_RAW",
+            "Importance_Mean": -0.010463086860909682,
+            "Importance_Std": 0.051137307404236415
+        },
+        {
+            "Feature": "ATW",
+            "Importance_Mean": -0.012235812248798878,
+            "Importance_Std": 0.046012120754252935
+        },
+        {
+            "Feature": "DELIV_PER",
+            "Importance_Mean": -0.03743321718931473,
+            "Importance_Std": 0.026973222462328302
+        }
+    ],
+    "champion_rules": []
+}
