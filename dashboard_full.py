@@ -336,6 +336,13 @@ elif page == "Signals":
 elif page == "Institutional Signals":
     st.markdown("<div class='section'>Institutional Signals (Rolling 30 Days)</div>", unsafe_allow_html=True)
     
+    try:
+        live_df = pd.read_csv("data/dashboard_cloud.csv", usecols=["DATE"])
+        calc_date = pd.to_datetime(live_df["DATE"].iloc[0], errors="coerce").strftime("%d %b %Y")
+        st.markdown(f"<p style='color: #a0aec0; margin-top: -10px; margin-bottom: 20px; font-weight: bold;'>⚡ All metrics actively recalculated using market data as of: <span style='color: #00ffcc;'>{calc_date}</span></p>", unsafe_allow_html=True)
+    except:
+        pass
+        
     with st.expander("🤖 How to read these scores (Machine Learning Insights)"):
         st.markdown("""
         **The ML Edge (Based on past 30 days of performance):**
