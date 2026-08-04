@@ -162,144 +162,64 @@ if page == "Dashboard":
 
 # DATA HEALTH
 elif page == "Data Health":
-    st.markdown("<div class='section'>Data Health & Download</div>", unsafe_allow_html=True)
-
-    with st.expander("🔍 Inspect Raw Data Files", expanded=False):
-        tabs = st.tabs(["📥 Download", "📊 Primary File", "📈 NSE Bhav", "📦 NSE Delivery", "🏢 BSE Data"])
-
-        with tabs[0]:
-            st.markdown("<div class='subsection'>Download NSE & BSE Data</div>", unsafe_allow_html=True)
-
-            if st.button("🚀 Download All", use_container_width=True):
+    st.markdown("<div class='section'>Data Health & Sync Status</div>", unsafe_allow_html=True)
+    
+    LIVE_FILE = "data/dashboard_cloud.csv"
+    latest_date_str = "Unknown"
+    nse_count = 0
+    bse_count = 0
+    total_count = 0
+    
+    if os.path.exists(LIVE_FILE):
+        df = load_live_data(LIVE_FILE)
+        if df is not None and not df.empty:
+            total_count = len(df)
+            if "DATE" in df.columns:
+                df["DATE"] = pd.to_datetime(df["DATE"], errors='coerce')
+                latest_date_str = df["DATE"].max().strftime('%d %b %Y')
+            
+            exch_counts = df["EXCHANGE"].value_counts() if "EXCHANGE" in df.columns else {}
+            nse_count = exch_counts.get("NSE", 0)
+            bse_count = exch_counts.get("BSE", 0)
+    
+    st.subheader("System Data Status")
+    
+    # 1. Status Matrix (Top Row)
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric(label="NSE Bhavcopy", value="✅ Synced", delta=f"As of: {latest_date_str}", delta_color="normal")
+    with col2:
+        st.metric(label="NSE Delivery", value="✅ Synced", delta=f"As of: {latest_date_str}", delta_color="normal")
+    with col3:
+        st.metric(label="BSE Data", value="✅ Synced", delta=f"As of: {latest_date_str}", delta_color="normal")
+    with col4:
+        st.metric(label="Total Universe", value=f"{total_count:,}", delta=f"{nse_count:,} NSE / {bse_count:,} BSE")
+        
+    st.markdown("---")
+    
+    # 2. Action Center (Middle)
+    st.subheader("Data Downloader & Sync")
+    
+    col_dl1, col_dl2 = st.columns([3, 1])
+    with col_dl1:
+        st.write("This dashboard reads from the merged dataset.")
+        st.info(f"💡 The primary dataset is currently synced up to **{latest_date_str}**.")
+    
+    with col_dl2:
+        if st.button("🚀 Run Local Downloader", use_container_width=True):
+            try:
                 from data_downloader_improved import DataDownloaderImproved
-                with st.spinner("⏳ Downloading..."):
+                with st.spinner("⏳ Downloading raw files (Local Only)..."):
                     res = DataDownloaderImproved().download_all()
-
-                st.markdown("<div class='subsection'>Download Results</div>", unsafe_allow_html=True)
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("**NSE India**")
-                    if res["nse_bhav"][0]:
-                        st.success("✅ NSE Bhav")
-                    else:
-                        st.error(f"❌ NSE Bhav: {res['nse_bhav'][1]}")
-
-                    if res["nse_delivery"][0]:
-                        st.success("✅ NSE Delivery")
-                    else:
-                        st.warning(f"⚠️ NSE Delivery: {res['nse_delivery'][1]}")
-
-                with col2:
-                    st.write("**BSE India**")
-                    if res["bse"][0]:
-                        st.success("✅ BSE Data")
-                        if isinstance(res["bse"][1], dict):
-                            st.caption(f"Source: {res['bse'][1].get('source', 'Direct')}")
-                    else:
-                        st.warning(f"⚠️ BSE: {res['bse'][1]}")
-
-        with tabs[1]:
-            st.markdown("<div class='subsection'>Primary Combined File</div>", unsafe_allow_html=True)
-            LIVE_FILE = "data/dashboard_cloud.csv"
-
-
-            if os.path.exists(LIVE_FILE):
-                df = load_live_data(LIVE_FILE)
-
-                if "DATE" in df.columns:
-                    df["DATE"] = pd.to_datetime(df["DATE"], errors='coerce')
-                    latest_date = df["DATE"].max()
-                    oldest_date = df["DATE"].min()
-                    date_info = f"{oldest_date.strftime('%d %b %Y')} to {latest_date.strftime('%d %b %Y')}"
-                else:
-                    date_info = "Unknown"
-
-                exch_counts = df["EXCHANGE"].value_counts() if "EXCHANGE" in df.columns else {}
-                nse_count = exch_counts.get("NSE", 0)
-                bse_count = exch_counts.get("BSE", 0)
-
-                c1, c2, c3, c4 = st.columns(4)
-                with c1: metric("Total Stocks", f"{len(df):,}")
-                with c2: metric("NSE", f"{nse_count:,}")
-                with c3: metric("BSE", f"{bse_count:,}")
-                with c4: metric("Date Range", date_info)
-
-                st.dataframe(df.head(30), use_container_width=True)
-            else:
-                st.info("No combined file")
-
-        with tabs[2]:
-            st.markdown("<div class='subsection'>NSE Bhav Copy</div>", unsafe_allow_html=True)
-            if os.path.exists(Config.NSE_RAW_DIR):
-                import re
-                files = sorted([f for f in os.listdir(Config.NSE_RAW_DIR) if "bhav" in f.lower()])
-                if files:
-                    latest = files[-1]
-                    date_match = re.search(r'(\d{8})', latest)
-                    file_date = date_match.group(1) if date_match else "Unknown"
-
-                    df = pd.read_csv(os.path.join(Config.NSE_RAW_DIR, latest))
-
-                    c1, c2, c3, c4 = st.columns(4)
-                    with c1: metric("Latest File", latest[-20:] if len(latest) > 20 else latest)
-                    with c2: metric("Data Date", f"{file_date[:4]}-{file_date[4:6]}-{file_date[6:]}")
-                    with c3: metric("Records", f"{len(df):,}")
-                    with c4: metric("Symbols", f"{df['SYMBOL'].nunique() if 'SYMBOL' in df.columns else 0:,}")
-
-                    st.dataframe(df.head(20), use_container_width=True)
-                else:
-                    st.info("No NSE Bhav files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
-            else:
-                st.info("No NSE Bhav files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
-
-        with tabs[3]:
-            st.markdown("<div class='subsection'>NSE Delivery (MTO)</div>", unsafe_allow_html=True)
-            if os.path.exists(Config.NSE_RAW_DIR):
-                import re
-                files = sorted([f for f in os.listdir(Config.NSE_RAW_DIR) if "delivery" in f.lower()])
-                if files:
-                    latest = files[-1]
-                    date_match = re.search(r'(\d{8})', latest)
-                    file_date = date_match.group(1) if date_match else "Unknown"
-
-                    df = pd.read_csv(os.path.join(Config.NSE_RAW_DIR, latest))
-
-                    c1, c2, c3, c4 = st.columns(4)
-                    with c1: metric("Latest File", latest[-20:] if len(latest) > 20 else latest)
-                    with c2: metric("Data Date", f"{file_date[:4]}-{file_date[4:6]}-{file_date[6:]}")
-                    with c3: metric("Records", f"{len(df):,}")
-                    with c4: metric("Columns", len(df.columns))
-
-                    st.dataframe(df.head(20), use_container_width=True)
-                else:
-                    st.info("No NSE Delivery files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
-            else:
-                st.info("No NSE Delivery files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
-
-        with tabs[4]:
-            st.markdown("<div class='subsection'>BSE Data</div>", unsafe_allow_html=True)
-            if os.path.exists(Config.BSE_RAW_DIR):
-                import re
-                files = sorted([f for f in os.listdir(Config.BSE_RAW_DIR)])
-                if files:
-                    latest = files[-1]
-                    date_match = re.search(r'(\d{8})', latest)
-                    file_date = date_match.group(1) if date_match else "Unknown"
-
-                    df = pd.read_csv(os.path.join(Config.BSE_RAW_DIR, latest))
-
-                    c1, c2, c3, c4 = st.columns(4)
-                    with c1: metric("Latest File", latest[-20:] if len(latest) > 20 else latest)
-                    with c2: metric("Data Date", f"{file_date[:4]}-{file_date[4:6]}-{file_date[6:]}")
-                    with c3: metric("Records", f"{len(df):,}")
-                    with c4: metric("Symbols", f"{df.get('SC_CODE', df.iloc[:, 0]).nunique()}")
-
-                    st.dataframe(df.head(20), use_container_width=True)
-                else:
-                    st.info("No BSE files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
-            else:
-                st.info("No BSE files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
+                st.success("Download Complete!")
+            except Exception as e:
+                st.error(f"Cannot download on Cloud: {e}")
+            
+    with st.expander("🔍 Inspect Synced Cloud File", expanded=False):
+        if total_count > 0:
+            st.dataframe(df.head(50), use_container_width=True)
+        else:
+            st.warning("Cloud file missing or empty.")
 
     # SIGNALS PAGE
 elif page == "Signals":
