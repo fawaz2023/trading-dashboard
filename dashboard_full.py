@@ -470,26 +470,31 @@ elif page == "Institutional Signals":
             # Reset index for clean sequential numbering
             df_hist = df_hist.reset_index(drop=True)
             
-            # Row highlighting function: today's signals get a green tint
-            def highlight_today_rows(row):
-                if row.name in df_hist.index and is_today.values[df_hist.index.get_loc(row.name)] if row.name < len(is_today) else False:
-                    return ['background-color: rgba(72, 187, 120, 0.15)'] * len(row)
-                return [''] * len(row)
-            
             # Build the is_today mask aligned to new index
             today_mask = is_today.values
             
-            def highlight_new_signals(df_style):
+            # Apply ML rules and today's highlighting
+            def apply_ml_styles(df_style):
                 styles = pd.DataFrame('', index=df_style.index, columns=df_style.columns)
                 for i, idx in enumerate(df_hist.index):
+                    # Default: today's signals get a light green tint
                     if i < len(today_mask) and today_mask[i]:
-                        styles.iloc[i] = 'background-color: rgba(72, 187, 120, 0.18); font-weight: bold'
+                        styles.iloc[i] = 'background-color: rgba(72, 187, 120, 0.15);'
+                    
+                    # ML TRAP (Overrides): High triggers = Distribution
+                    if df_hist.iloc[i]['TRIGGER_COUNT_30D'] > 2:
+                        styles.iloc[i] = 'background-color: rgba(255, 76, 76, 0.15); color: #ff4c4c;'
+                    
+                    # ML EDGE (Overrides): Fresh trigger + High Stability
+                    elif df_hist.iloc[i]['TRIGGER_COUNT_30D'] == 1 and df_hist.iloc[i]['STABILITY_RAW'] > 3.16:
+                        styles.iloc[i] = 'background-color: rgba(0, 255, 204, 0.15); color: #00ffcc; font-weight: bold;'
+                        
                 return styles
             
             # Apply styling
             if "DELIV_PER" in avail_cols:
                 styled_df = df_hist[avail_cols].style.map(style_actionable_band, subset=["DELIV_PER"])
-                styled_df = styled_df.apply(lambda _: highlight_new_signals(df_hist[avail_cols]), axis=None)
+                styled_df = styled_df.apply(lambda _: apply_ml_styles(df_hist[avail_cols]), axis=None)
                 
                 format_dict = {}
                 for raw_col in ["MOMENTUM_RAW", "FOOTPRINT_RAW", "STABILITY_RAW"]:
