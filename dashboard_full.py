@@ -438,28 +438,58 @@ elif page == "Institutional Signals":
                 df_hist = df_hist.sort_values(by=["AI_SCORE", "STABILITY_RAW"], ascending=[False, False])
             else:
                 df_hist = df_hist.sort_values(by=["COMBINED_SCORE"], ascending=[False])
+            
+            # Create FIRST_TRIGGERED from DATE (the day the stock first entered the scanner)
+            df_hist["FIRST_TRIGGERED"] = df_hist["DATE"].dt.strftime("%d %b %Y")
+            
+            # Determine today's date for highlighting
+            today_date = df_hist["DATE"].max()
+            is_today = df_hist["DATE"] == today_date
+            
+            # Add a "🆕" tag to today's signals in the SYMBOL column
             # Add repeat flags
             if "REPEAT_FLAG" in df_hist.columns and "TRIGGER_COUNT_30D" in df_hist.columns:
                 mask = df_hist["REPEAT_FLAG"] == True
-                df_hist.loc[mask, "SYMBOL"] = df_hist.loc[mask, "SYMBOL"] + " \U0001f525(" + df_hist.loc[mask, "TRIGGER_COUNT_30D"].astype(str) + ")"
+                df_hist.loc[mask, "SYMBOL"] = df_hist.loc[mask, "SYMBOL"] + " 🔥(" + df_hist.loc[mask, "TRIGGER_COUNT_30D"].astype(str) + ")"
+            
+            # Tag today's new signals
+            df_hist.loc[is_today, "SYMBOL"] = "🆕 " + df_hist.loc[is_today, "SYMBOL"]
                 
             if date_filter == "ALL":
                 st.success(f"Displaying {len(df_hist)} survivors across all dates")
             else:
                 st.success(f"Displaying {len(df_hist)} survivors for {date_filter}")
 
-            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", 
+            # FIRST_TRIGGERED goes at the end (right side)
+            display_cols = ["SYMBOL", "EXCHANGE", "CLOSE", 
                             "AI_SCORE", "COMBINED_SCORE", 
                             "TRIGGER_COUNT_30D", "STABILITY_RAW", 
-                            "DELIV_PER", "ATW"]
+                            "DELIV_PER", "ATW", "FIRST_TRIGGERED"]
             avail_cols = [c for c in display_cols if c in df_hist.columns]
             
             # Reset index for clean sequential numbering
             df_hist = df_hist.reset_index(drop=True)
             
-            # Apply styling to DELIV_PER
+            # Row highlighting function: today's signals get a green tint
+            def highlight_today_rows(row):
+                if row.name in df_hist.index and is_today.values[df_hist.index.get_loc(row.name)] if row.name < len(is_today) else False:
+                    return ['background-color: rgba(72, 187, 120, 0.15)'] * len(row)
+                return [''] * len(row)
+            
+            # Build the is_today mask aligned to new index
+            today_mask = is_today.values
+            
+            def highlight_new_signals(df_style):
+                styles = pd.DataFrame('', index=df_style.index, columns=df_style.columns)
+                for i, idx in enumerate(df_hist.index):
+                    if i < len(today_mask) and today_mask[i]:
+                        styles.iloc[i] = 'background-color: rgba(72, 187, 120, 0.18); font-weight: bold'
+                return styles
+            
+            # Apply styling
             if "DELIV_PER" in avail_cols:
                 styled_df = df_hist[avail_cols].style.map(style_actionable_band, subset=["DELIV_PER"])
+                styled_df = styled_df.apply(lambda _: highlight_new_signals(df_hist[avail_cols]), axis=None)
                 
                 format_dict = {}
                 for raw_col in ["MOMENTUM_RAW", "FOOTPRINT_RAW", "STABILITY_RAW"]:
