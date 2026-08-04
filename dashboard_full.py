@@ -163,36 +163,50 @@ if page == "Dashboard":
 elif page == "Data Health":
     st.markdown("<div class='section'>Data Health & Sync Status</div>", unsafe_allow_html=True)
     
+    import json
+    status_file = "data/data_status.json"
+    status_data = {}
+    if os.path.exists(status_file):
+        try:
+            with open(status_file, 'r', encoding='utf-8') as f:
+                status_data = json.load(f)
+        except:
+            pass
+            
+    # Load total counts from cloud file if available
     LIVE_FILE = "data/dashboard_cloud.csv"
-    latest_date_str = "Unknown"
-    nse_count = 0
-    bse_count = 0
-    total_count = 0
-    
+    total_count, nse_count, bse_count = 0, 0, 0
+    df = None
     if os.path.exists(LIVE_FILE):
         df = load_live_data(LIVE_FILE)
         if df is not None and not df.empty:
             total_count = len(df)
-            if "DATE" in df.columns:
-                df["DATE"] = pd.to_datetime(df["DATE"], errors='coerce')
-                latest_date_str = df["DATE"].max().strftime('%d %b %Y')
-            
             exch_counts = df["EXCHANGE"].value_counts() if "EXCHANGE" in df.columns else {}
             nse_count = exch_counts.get("NSE", 0)
             bse_count = exch_counts.get("BSE", 0)
     
     st.subheader("System Data Status")
     
-    # 1. Status Matrix (Top Row)
     col1, col2, col3, col4 = st.columns(4)
+    
+    def get_status_ui(date_str):
+        if date_str and date_str != "Missing":
+            return "🟢 Synced"
+        return "🔴 Missing"
+
+    nse_bhav_date = status_data.get("nse_bhav_date", "Unknown")
+    nse_deliv_date = status_data.get("nse_deliv_date", "Unknown")
+    bse_bhav_date = status_data.get("bse_bhav_date", "Unknown")
+    bse_deliv_date = status_data.get("bse_deliv_date", "Unknown")
+
     with col1:
-        st.metric(label="📈 NSE Bhavcopy", value=f"{latest_date_str}", delta="🟢 Synced", delta_color="off")
+        st.metric(label="📈 NSE Bhavcopy", value=f"{nse_bhav_date}", delta=get_status_ui(nse_bhav_date), delta_color="off")
     with col2:
-        st.metric(label="📦 NSE Delivery", value=f"{latest_date_str}", delta="🟢 Synced", delta_color="off")
+        st.metric(label="📦 NSE Delivery", value=f"{nse_deliv_date}", delta=get_status_ui(nse_deliv_date), delta_color="off")
     with col3:
-        st.metric(label="🏦 BSE Data", value=f"{latest_date_str}", delta="🟢 Synced", delta_color="off")
+        st.metric(label="🏦 BSE Bhavcopy", value=f"{bse_bhav_date}", delta=get_status_ui(bse_bhav_date), delta_color="off")
     with col4:
-        st.metric(label="🌐 Total Universe", value=f"{total_count:,}", delta=f"{nse_count:,} NSE / {bse_count:,} BSE", delta_color="off")
+        st.metric(label="🚚 BSE Delivery", value=f"{bse_deliv_date}", delta=get_status_ui(bse_deliv_date), delta_color="off")
         
     st.markdown("---")
     
@@ -201,8 +215,9 @@ elif page == "Data Health":
     
     col_dl1, col_dl2 = st.columns([3, 1])
     with col_dl1:
-        st.write("This dashboard reads from the merged dataset.")
-        st.info(f"💡 The primary dataset is currently synced up to **{latest_date_str}**.")
+        st.write(f"🌐 **Total Universe**: {total_count:,} Stocks ({nse_count:,} NSE / {bse_count:,} BSE)")
+        last_run = status_data.get('last_run', 'Unknown')
+        st.info(f"💡 The background sync last ran on: **{last_run}**.")
     
     with col_dl2:
         if st.button("🚀 Run Local Downloader", use_container_width=True):
@@ -215,7 +230,7 @@ elif page == "Data Health":
                 st.error(f"Cannot download on Cloud: {e}")
             
     with st.expander("🔍 Inspect Synced Cloud File", expanded=False):
-        if total_count > 0:
+        if total_count > 0 and df is not None:
             st.dataframe(df.head(50), use_container_width=True)
         else:
             st.warning("Cloud file missing or empty.")
