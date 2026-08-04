@@ -40,10 +40,9 @@ st.markdown('''<style>
     .stDataFrame tbody tr { transition: all 0.3s ease; }
     .stDataFrame tbody tr:hover { background: rgba(142,162,255,0.2) !important; transform: scale(1.02); cursor: pointer; }
     
-    /* Button hover */
-    .stButton button { transition: all 0.3s ease; background: linear-gradient(135deg,#667eea,#764ba2); }
-    .stButton button:hover { background: linear-gradient(135deg,#764ba2,#667eea); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(142,162,255,0.5); }
-    
+    /* Premium Button */
+    div.stButton > button:first-child { background: linear-gradient(135deg, #6c5ce7 0%, #8e7bff 100%); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: bold; letter-spacing: 0.5px; width: 100%; transition: all 0.3s ease; }
+    div.stButton > button:first-child:hover { background: linear-gradient(135deg, #5a4bd1 0%, #7a6bf2 100%); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3); }    
     /* Input hover */
     .stTextInput input:hover, .stNumberInput input:hover { border-color: #8ea2ff; box-shadow: 0 0 15px rgba(142,162,255,0.3); }
     
@@ -187,13 +186,13 @@ elif page == "Data Health":
     # 1. Status Matrix (Top Row)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric(label="NSE Bhavcopy", value="✅ Synced", delta=f"As of: {latest_date_str}", delta_color="normal")
+        st.metric(label="📈 NSE Bhavcopy", value="🟢 Synced", delta=f"{latest_date_str}", delta_color="off")
     with col2:
-        st.metric(label="NSE Delivery", value="✅ Synced", delta=f"As of: {latest_date_str}", delta_color="normal")
+        st.metric(label="📦 NSE Delivery", value="🟢 Synced", delta=f"{latest_date_str}", delta_color="off")
     with col3:
-        st.metric(label="BSE Data", value="✅ Synced", delta=f"As of: {latest_date_str}", delta_color="normal")
+        st.metric(label="🏦 BSE Data", value="🟢 Synced", delta=f"{latest_date_str}", delta_color="off")
     with col4:
-        st.metric(label="Total Universe", value=f"{total_count:,}", delta=f"{nse_count:,} NSE / {bse_count:,} BSE")
+        st.metric(label="🌐 Total Universe", value=f"{total_count:,}", delta=f"{nse_count:,} NSE / {bse_count:,} BSE", delta_color="off")
         
     st.markdown("---")
     
