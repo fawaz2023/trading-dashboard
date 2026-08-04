@@ -1,0 +1,20 @@
+import pandas as pd
+
+df = pd.read_csv("data/combined_dashboard_live.csv")
+print("Columns available:", df.columns.tolist())
+
+# If DATE is missing as a column name, try searching for date-like columns
+date_candidates = ["DATE","Date","date","BizDt","TradDt"]
+found = next((c for c in date_candidates if c in df.columns), None)
+
+if found:
+    # Convert date column to datetime and rename
+    df[found] = pd.to_datetime(df[found], errors="coerce")
+    df.rename(columns={found:"DATE"}, inplace=True)
+    print(f"Using {found} as DATE column")
+else:
+    print("WARNING: No DATE column found in CSV")
+
+print(f"Total stocks: {len(df)}")
+print(f"Unique ISIN: {df['ISIN'].nunique() if 'ISIN' in df.columns else 'N/A'}")
+print(f"Stocks by exchange:\n{df['EXCHANGE'].value_counts() if 'EXCHANGE' in df.columns else 'N/A'}")

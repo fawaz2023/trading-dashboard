@@ -1,4 +1,9 @@
 import os
+import sys
+import io
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
 import glob
 import pandas as pd
 import requests
@@ -330,16 +335,27 @@ for fp in bse_delivery_files:
 df_bse_deliv = pd.concat(bse_del_frames, ignore_index=True) if bse_del_frames else pd.DataFrame()
 print(f"✅ BSE delivery rows: {len(df_bse_deliv)}")
 
+
 # -------------------------------
 # Save Exact Status JSON
 # -------------------------------
 import json
+import pandas as pd
 try:
+    def get_max_date(df):
+        if df is None or df.empty or 'DATE' not in df.columns:
+            return 'Missing'
+        max_val = df['DATE'].max()
+        if str(type(max_val)) == "<class 'numpy.int64'>" or isinstance(max_val, (int, str)):
+            return pd.to_datetime(str(max_val), format='%Y%m%d', errors='coerce').strftime('%d %b %Y')
+        else:
+            return max_val.strftime('%d %b %Y')
+            
     status_data = {
-        'nse_bhav_date': df_nse['DATE'].max().strftime('%d %b %Y') if not df_nse.empty and 'DATE' in df_nse else 'Missing',
-        'nse_deliv_date': df_nse_deliv['DATE'].max().strftime('%d %b %Y') if not df_nse_deliv.empty and 'DATE' in df_nse_deliv else 'Missing',
-        'bse_bhav_date': df_bse['DATE'].max().strftime('%d %b %Y') if not df_bse.empty and 'DATE' in df_bse else 'Missing',
-        'bse_deliv_date': df_bse_deliv['DATE'].max().strftime('%d %b %Y') if not df_bse_deliv.empty and 'DATE' in df_bse_deliv else 'Missing',
+        'nse_bhav_date': get_max_date(df_nse),
+        'nse_deliv_date': get_max_date(df_nse_deliv),
+        'bse_bhav_date': get_max_date(df_bse),
+        'bse_deliv_date': get_max_date(df_bse_deliv),
         'last_run': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
     with open('data/data_status.json', 'w') as f:
