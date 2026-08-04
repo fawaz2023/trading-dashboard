@@ -89,7 +89,7 @@ def style_actionable_band(val):
 def metric(label, value):
     st.markdown(f"<div class='card metric'><div class='label'>{label}</div><div class='value'>{value}</div></div>", unsafe_allow_html=True)
 
-page = st.sidebar.radio("Navigation", ["Dashboard", "Data Health", "Signals", "Institutional Signals", "Verify Conditions", "Watchlist", "Win Rate"])
+page = st.sidebar.radio("Navigation", ["Dashboard", "Signals", "Institutional Signals", "Verify Conditions", "Watchlist", "Win Rate", "Data Health"])
 st.sidebar.divider()
 exclude_t2t = st.sidebar.checkbox("🚫 Hide 100% Delivery (T2T)", value=True)
 
@@ -247,7 +247,11 @@ elif page == "Data Health":
                 with c4: metric("Symbols", f"{df['SYMBOL'].nunique() if 'SYMBOL' in df.columns else 0:,}")
                 
                 st.dataframe(df.head(20), use_container_width=True)
-    
+            else:
+                st.info("No NSE Bhav files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
+        else:
+            st.info("No NSE Bhav files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
+
     with tabs[3]:
         st.markdown("<div class='subsection'>NSE Delivery (MTO)</div>", unsafe_allow_html=True)
         if os.path.exists(Config.NSE_RAW_DIR):
