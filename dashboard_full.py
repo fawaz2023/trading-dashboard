@@ -271,7 +271,11 @@ elif page == "Data Health":
                 with c4: metric("Columns", len(df.columns))
                 
                 st.dataframe(df.head(20), use_container_width=True)
-    
+            else:
+                st.info("No NSE Delivery files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
+        else:
+            st.info("No NSE Delivery files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
+            
     with tabs[4]:
         st.markdown("<div class='subsection'>BSE Data</div>", unsafe_allow_html=True)
         if os.path.exists(Config.BSE_RAW_DIR):
@@ -292,8 +296,9 @@ elif page == "Data Health":
                 
                 st.dataframe(df.head(20), use_container_width=True)
             else:
-                st.info("No BSE files - Try downloading")
-
+                st.info("No BSE files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
+        else:
+            st.info("No BSE files - Note: Raw download files are stored locally on your PC, not on the Cloud.")
 
 # SIGNALS PAGE
 elif page == "Signals":
