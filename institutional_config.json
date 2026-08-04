@@ -1,5 +1,5 @@
 {
-    "validation_timestamp": "2026-07-27T13:18:05.949502",
+    "validation_timestamp": "2026-07-29T17:03:58.384430",
     "status": "VALID",
     "inputs": {
         "combined_live": "data/combined_dashboard_live.csv",

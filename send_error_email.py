@@ -18,11 +18,12 @@ def send_email(subject, body, to_email, from_email, from_password):
 
 if __name__ == "__main__":
     import sys
+    import os
     # Example usage:
     subject = "Trading Dashboard Alert: Data Download Failed"
     body = "Please check your dashboard automation. There was a failure in data download."
     to_email = "brightfox270@gmail.com"  # Replace with your email
     from_email = "brightfox270@gmail.com"  # Replace with your Gmail
-    from_password = "forex4win"  # Use Gmail App Password for security
+    from_password = os.environ.get("GMAIL_APP_PASSWORD")  # Read from environment variable
 
     send_email(subject, body, to_email, from_email, from_password)
