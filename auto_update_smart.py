@@ -241,12 +241,12 @@ if start_date <= end_date:
             date_str = cur.strftime("%Y%m%d")
             nse_exists = os.path.exists(f"data/nse_raw/nse_bhav_{date_str}.csv")
             bse_exists = os.path.exists(f"data/bse_raw/bse_bhav_{date_str}.csv")
-            bse_deliv_exists = os.path.exists(f"data/bse_delivery_{date_str}.csv")
-            status = "✅" if (nse_exists and bse_deliv_exists) else "⚠️ "
+            nse_deliv_exists = os.path.exists(f"data/nse_raw/nse_delivery_{date_str}.csv")
+            status = "✅" if (nse_exists and nse_deliv_exists) else "⚠️ "
             msg = f"{status} {cur.strftime('%d %b')}: "
             msg += f"NSE={'✓' if nse_exists else '✗'} "
             msg += f"BSE={'✓' if bse_exists else '✗'} "
-            msg += f"Deliv={'✓' if bse_deliv_exists else '✗'}"
+            msg += f"Deliv={'✓' if nse_deliv_exists else '✗'}"
             print(msg)
             cur += timedelta(days=1)
         print(f"{'='*70}\n")

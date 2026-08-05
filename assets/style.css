@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+body {
+    background-color: #0E1117;
+    background-image: radial-gradient(circle at 15% 50%, rgba(108, 92, 231, 0.05), transparent 25%),
+                      radial-gradient(circle at 85% 30%, rgba(0, 255, 204, 0.03), transparent 25%);
+    color: #FAFAFA;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Glassmorphism Sidebar */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    padding: 2rem 1.5rem;
+    background: rgba(18, 20, 23, 0.7);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    z-index: 1000;
+}
+
+.sidebar h2 {
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, #6c5ce7 0%, #00FFCC 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 2.5rem;
+}
+
+.sidebar-nav-link {
+    display: block;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    color: #8b949e;
+    text-decoration: none;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.sidebar-nav-link:hover {
+    color: #FAFAFA;
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateX(4px);
+}
+
+.sidebar-nav-link.active {
+    color: #FAFAFA;
+    background: rgba(108, 92, 231, 0.15);
+    border: 1px solid rgba(108, 92, 231, 0.3);
+    font-weight: 600;
+}
+
+/* Main Content Area */
+.content {
+    margin-left: 280px;
+    padding: 2rem 3rem;
+}
+
+/* Glassmorphism Cards */
+.glass-card {
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-card:hover {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* KPI Typography */
+.kpi-label {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #8b949e;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+.kpi-value {
+    font-size: 36px;
+    font-weight: 800;
+    color: #FAFAFA;
+    line-height: 1.1;
+}
+.kpi-value.success { color: #00FFCC; }
+.kpi-value.warning { color: #f39c12; }
+.kpi-value.danger { color: #ff4c4c; }
+
+/* Premium Buttons */
+.btn-premium {
+    background: linear-gradient(135deg, #6c5ce7 0%, #8e7bff 100%) !important;
+    border: none !important;
+    color: white !important;
+    font-weight: 600;
+    padding: 10px 24px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(108, 92, 231, 0.2);
+}
+.btn-premium:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(108, 92, 231, 0.4);
+}
+
+/* AG-Grid Alpine Dark Customization */
+.ag-theme-alpine-dark {
+    --ag-background-color: transparent !important;
+    --ag-header-background-color: rgba(0, 0, 0, 0.2) !important;
+    --ag-odd-row-background-color: rgba(255, 255, 255, 0.01) !important;
+    --ag-header-foreground-color: #8b949e !important;
+    --ag-foreground-color: #FAFAFA !important;
+    --ag-border-color: rgba(255, 255, 255, 0.05) !important;
+    --ag-row-border-color: rgba(255, 255, 255, 0.03) !important;
+    --ag-row-hover-color: rgba(108, 92, 231, 0.15) !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+.ag-theme-alpine-dark .ag-root-wrapper {
+    border: none !important;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.ag-theme-alpine-dark .ag-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+}
+
+/* ML Rule Badges */
+.ml-badge {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 12px;
+    backdrop-filter: blur(4px);
+}
