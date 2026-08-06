@@ -346,8 +346,11 @@ try:
         if df is None or df.empty or 'DATE' not in df.columns:
             return 'Missing'
         max_val = df['DATE'].max()
+        if pd.isna(max_val):
+            return 'Missing'
         if str(type(max_val)) == "<class 'numpy.int64'>" or isinstance(max_val, (int, str)):
-            return pd.to_datetime(str(max_val), format='%Y%m%d', errors='coerce').strftime('%d %b %Y')
+            dt = pd.to_datetime(str(max_val), format='%Y%m%d', errors='coerce')
+            return dt.strftime('%d %b %Y') if pd.notna(dt) else 'Missing'
         else:
             return max_val.strftime('%d %b %Y')
             
