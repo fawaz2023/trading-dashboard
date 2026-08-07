@@ -3,7 +3,7 @@ from dash import Dash, html, dcc
 import dash_bootstrap_components as dbc
 
 # Initialize the multi-page Dash app
-app = Dash(__name__, use_pages=True, external_stylesheets=[dbc.themes.CYBORG])
+app = Dash(__name__, use_pages=True, pages_folder="dash_pages", external_stylesheets=[dbc.themes.CYBORG])
 app.title = "Institutional Screener"
 
 # Define the glassmorphism sidebar
