@@ -8,3 +8,7 @@ data/historical_*.csv
 data/forward_performance.csv
 data/institutional_edge_report.csv
 data/ml/
+
+data/nse_raw/
+data/bse_raw/
+data/combined_2years.csv
