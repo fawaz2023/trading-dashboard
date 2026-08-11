@@ -7,7 +7,7 @@ from config import Config
 st.set_page_config(page_title="Trading Dashboard", layout="wide")
 
 @st.cache_data(ttl=3600)
-def load_live_data(filepath):
+def load_live_data(filepath, file_mtime=0):
     if os.path.exists(filepath):
         df = pd.read_csv(filepath)
         if "DATE" in df.columns:
@@ -90,6 +90,9 @@ def metric(label, value):
 
 page = st.sidebar.radio("Navigation", ["Dashboard", "Signals", "Institutional Signals", "Verify Conditions", "Watchlist", "Win Rate", "Data Health"])
 st.sidebar.divider()
+if st.sidebar.button("🔄 Force Data Refresh", help="Clear cache and reload latest data from disk", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()
 exclude_t2t = st.sidebar.checkbox("🚫 Hide 100% Delivery (T2T)", value=True)
 
 
@@ -103,7 +106,7 @@ if page == "Dashboard":
 
         
         if os.path.exists(LIVE_FILE):
-            df = load_live_data(LIVE_FILE)
+            df = load_live_data(LIVE_FILE, os.path.getmtime(LIVE_FILE))
             
             # Validate DATE column
             if "DATE" not in df.columns or df["DATE"].isna().all():
@@ -178,7 +181,7 @@ elif page == "Data Health":
     total_count, nse_count, bse_count = 0, 0, 0
     df = None
     if os.path.exists(LIVE_FILE):
-        df = load_live_data(LIVE_FILE)
+        df = load_live_data(LIVE_FILE, os.path.getmtime(LIVE_FILE))
         if df is not None and not df.empty:
             total_count = len(df)
             exch_counts = df["EXCHANGE"].value_counts() if "EXCHANGE" in df.columns else {}
@@ -415,7 +418,7 @@ elif page == "Institutional Signals":
             display_cols = ["SYMBOL", "EXCHANGE", "CLOSE", 
                             "AI_SCORE", "COMBINED_SCORE", 
                             "TRIGGER_COUNT_30D", "STABILITY_RAW", 
-                            "DELIV_PER", "ATW", "FIRST_TRIGGERED"]
+                            "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "FIRST_TRIGGERED"]
             avail_cols = [c for c in display_cols if c in df_hist.columns]
             
             # Reset index for clean sequential numbering
@@ -475,7 +478,7 @@ elif page == "Verify Conditions":
 
 
         if os.path.exists(LIVE_FILE):
-            df = load_live_data(LIVE_FILE)
+            df = load_live_data(LIVE_FILE, os.path.getmtime(LIVE_FILE))
             if exclude_t2t and "EVER_100_DELIV" in df.columns:
                 df_filt = df[df["EVER_100_DELIV"] == False]
             else:
@@ -523,7 +526,7 @@ elif page == "Watchlist":
 
 
             if os.path.exists(LIVE_FILE):
-                df = load_live_data(LIVE_FILE)
+                df = load_live_data(LIVE_FILE, os.path.getmtime(LIVE_FILE))
                 wm.auto_update_prices(df)
                 wm = WatchlistManager()  # Reload after update
             

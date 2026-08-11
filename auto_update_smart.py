@@ -214,14 +214,17 @@ if start_date <= end_date:
             # The helper normalizes and sets DATE=YYYYMMDD
             df_bse_del.to_csv(f"data/bse_delivery_{out_date}.csv", index=False)
 
-        if ok_bhav:
-            msg = "✅ NSE"
-            if ok_bse: msg += " + BSE"
-            if bse_deliv_ok: msg += " (deliv)"
+        if ok_bhav or ok_deliv or ok_bse or bse_deliv_ok:
+            msg = "✅ Download Status:\n"
+            msg += f"    NSE Bhav: {'✅' if ok_bhav else '❌'}\n"
+            msg += f"    NSE Deliv: {'✅' if ok_deliv else '❌'}\n"
+            msg += f"    BSE Bhav: {'✅' if ok_bse else '❌'}\n"
+            msg += f"    BSE Deliv: {'✅' if bse_deliv_ok else '❌'}"
             print(msg)
-            downloaded += 1
+            if ok_bhav and ok_bse: # Count as success if we at least got the price files
+                downloaded += 1
         else:
-            print("❌")
+            print("❌ All downloads failed")
 
         cur += timedelta(days=1)
 
@@ -242,11 +245,14 @@ if start_date <= end_date:
             nse_exists = os.path.exists(f"data/nse_raw/nse_bhav_{date_str}.csv")
             bse_exists = os.path.exists(f"data/bse_raw/bse_bhav_{date_str}.csv")
             nse_deliv_exists = os.path.exists(f"data/nse_raw/nse_delivery_{date_str}.csv")
-            status = "✅" if (nse_exists and nse_deliv_exists) else "⚠️ "
+            bse_deliv_exists = os.path.exists(f"data/bse_delivery_{date_str}.csv")
+            
+            status = "✅" if (nse_exists and nse_deliv_exists and bse_exists and bse_deliv_exists) else "⚠️ "
             msg = f"{status} {cur.strftime('%d %b')}: "
-            msg += f"NSE={'✓' if nse_exists else '✗'} "
-            msg += f"BSE={'✓' if bse_exists else '✗'} "
-            msg += f"Deliv={'✓' if nse_deliv_exists else '✗'}"
+            msg += f"NSE={'✓' if nse_exists else '✗'} | "
+            msg += f"BSE={'✓' if bse_exists else '✗'} | "
+            msg += f"NSE Deliv={'✓' if nse_deliv_exists else '✗'} | "
+            msg += f"BSE Deliv={'✓' if bse_deliv_exists else '✗'}"
             print(msg)
             cur += timedelta(days=1)
         print(f"{'='*70}\n")
