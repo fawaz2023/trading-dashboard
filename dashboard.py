@@ -379,15 +379,78 @@ elif page == "Signals":
 
 # SBIA DUAL-WATCHLIST ARCHITECTURE
 elif page == "SBIA Institutional Engine":
-    st.markdown("<div class='section'>Dual-Watchlist Execution Engine</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section'>Institutional Execution Engine</div>", unsafe_allow_html=True)
     
     st.markdown("""
-    This page is strictly split into two sections: The prominent **Verified Execution Watchlist (SBIA)** and the **Raw Unverified Legacy List**.
-    """)
+    <div style='background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 15px; margin-bottom: 25px;'>
+    This dual-engine system filters raw institutional footprints (Legacy) through a rigorous ML verification gate (SBIA) to eliminate distribution traps.
+    </div>
+    """, unsafe_allow_html=True)
     
-    # --- SBIA LIVE WATCHLIST ---
-    st.markdown("<div class='subsection'>🏆 SBIA Live Execution Watchlist (Verified Low-Drawdown)</div>", unsafe_allow_html=True)
-    st.info("These are the ONLY stocks verified by the low-drawdown ML backtest and approved for execution. They have passed the Baseline Sanity Filters (>₹100 Cr Turnover, >21k Implied Trades, Whale Density 3.5-50.0) AND the Machine Learning AI Gate (Win Probability >= 60.0%).")
+    # --- LEGACY WATCHLIST (TOP) ---
+    st.markdown("<div class='subsection'>🔬 Phase 1: Institutional Screener (Raw ATW Unverified)</div>", unsafe_allow_html=True)
+    
+    LEGACY_FILE = "data/legacy_watchlist.csv"
+    if os.path.exists(LEGACY_FILE):
+        df_legacy = pd.read_csv(LEGACY_FILE)
+        if len(df_legacy) > 0:
+            df_legacy["DATE_RAW"] = pd.to_datetime(df_legacy["DATE"], errors="coerce")
+            df_legacy["DATE"] = df_legacy["DATE_RAW"].dt.strftime("%d %b %Y")
+            today_date = df_legacy["DATE_RAW"].max()
+            is_today = df_legacy["DATE_RAW"] == today_date
+            
+            # Tag today's new signals
+            df_legacy.loc[is_today, "SYMBOL"] = "🆕 " + df_legacy.loc[is_today, "SYMBOL"]
+            if "REPEAT_FLAG" in df_legacy.columns and "TRIGGER_COUNT_30D" in df_legacy.columns:
+                mask = (df_legacy["REPEAT_FLAG"] == True) & df_legacy["TRIGGER_COUNT_30D"].notna()
+                df_legacy.loc[mask, "SYMBOL"] = df_legacy.loc[mask, "SYMBOL"] + " 🔥(" + df_legacy.loc[mask, "TRIGGER_COUNT_30D"].astype(str) + ")"
+            
+            legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR"]
+            avail_leg_cols = [c for c in legacy_cols if c in df_legacy.columns]
+            
+            df_legacy = df_legacy.reset_index(drop=True)
+            today_mask = is_today.values
+            
+            def apply_ml_styles(df_style):
+                styles = pd.DataFrame('', index=df_style.index, columns=df_style.columns)
+                for i, _ in enumerate(df_legacy.index):
+                    if i < len(today_mask) and today_mask[i]:
+                        styles.iloc[i] = 'background-color: rgba(72, 187, 120, 0.15);'
+                    if 'TRIGGER_COUNT_30D' in df_legacy.columns and df_legacy.iloc[i]['TRIGGER_COUNT_30D'] > 2:
+                        styles.iloc[i] = 'background-color: rgba(255, 76, 76, 0.15); color: #ff4c4c;'
+                    elif 'TRIGGER_COUNT_30D' in df_legacy.columns and 'STABILITY_RAW' in df_legacy.columns and df_legacy.iloc[i]['TRIGGER_COUNT_30D'] == 1 and df_legacy.iloc[i]['STABILITY_RAW'] > 3.16:
+                        styles.iloc[i] = 'background-color: rgba(0, 255, 204, 0.15); color: #00ffcc; font-weight: bold;'
+                return styles
+                
+            format_dict_leg = {
+                "CLOSE": "₹{:.2f}",
+                "STABILITY_RAW": "{:.2f}",
+                "STOP_LOSS": "₹{:.2f}",
+                "TAKE_PROFIT": "₹{:.2f}",
+                "REC_POS_SIZE_INR": "₹{:,.0f}",
+                "DELIVERY_TURNOVER": "₹{:,.0f}",
+                "ATW": "₹{:,.0f}"
+            }
+            
+            styled_leg = df_legacy[avail_leg_cols].style.format(format_dict_leg)
+            styled_leg = styled_leg.apply(lambda _: apply_ml_styles(df_legacy[avail_leg_cols]), axis=None)
+            
+            st.dataframe(styled_leg, use_container_width=True, hide_index=True)
+        else:
+            st.info("No legacy signals found.")
+    else:
+        st.info("Legacy watchlist not found.")
+        
+    st.markdown("<br><hr style='border-color: rgba(255,255,255,0.1); margin: 30px 0;'>", unsafe_allow_html=True)
+        
+    # --- SBIA LIVE WATCHLIST (BOTTOM) ---
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(39, 174, 96, 0.05)); border: 1px solid rgba(46, 204, 113, 0.4); border-radius: 12px; padding: 20px;'>
+        <h3 style='margin-top: 0; color: #2ecc71; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>🏆</span> Phase 2: SBIA Verified Execution</h3>
+        <p style='margin-bottom: 0; opacity: 0.9;'>These signals have survived the extreme Sanity Filters and the Machine Learning Bouncer. Execute these setups.</p>
+    </div>
+    <br>
+    """, unsafe_allow_html=True)
     
     SBIA_FILE = "data/sbia_institutional_watchlist.csv"
     if os.path.exists(SBIA_FILE):
@@ -395,7 +458,6 @@ elif page == "SBIA Institutional Engine":
         if len(df_sbia) > 0:
             df_sbia["DATE"] = pd.to_datetime(df_sbia["DATE"], errors="coerce").dt.strftime("%d %b %Y")
             
-            # Format Risk parameters
             format_dict = {
                 "CLOSE": "₹{:.2f}",
                 "ATR14": "₹{:.2f}",
@@ -417,38 +479,6 @@ elif page == "SBIA Institutional Engine":
             st.warning("⚠️ No stocks passed the strict ML Gate today. The market environment is hostile to the setup.")
     else:
         st.warning("Run calculate_active_signals.py to generate the SBIA Watchlist.")
-        
-    st.markdown("<br><br>", unsafe_allow_html=True)
-        
-    # --- LEGACY WATCHLIST ---
-    with st.expander("🔬 Legacy Institutional Screener (Raw ATW Unverified)", expanded=False):
-        st.warning("⚠️ WARNING: These signals have NOT passed the ML gate. They carry a higher risk of being liquidity traps or distribution plays. Provided for visual continuity only.")
-        
-        LEGACY_FILE = "data/legacy_watchlist.csv"
-        if os.path.exists(LEGACY_FILE):
-            df_legacy = pd.read_csv(LEGACY_FILE)
-            if len(df_legacy) > 0:
-                df_legacy["DATE"] = pd.to_datetime(df_legacy["DATE"], errors="coerce").dt.strftime("%d %b %Y")
-                
-                legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR"]
-                avail_leg_cols = [c for c in legacy_cols if c in df_legacy.columns]
-                
-                format_dict_leg = {
-                    "CLOSE": "₹{:.2f}",
-                    "STABILITY_RAW": "{:.2f}",
-                    "STOP_LOSS": "₹{:.2f}",
-                    "TAKE_PROFIT": "₹{:.2f}",
-                    "REC_POS_SIZE_INR": "₹{:,.0f}",
-                    "DELIVERY_TURNOVER": "₹{:,.0f}",
-                    "ATW": "₹{:,.0f}"
-                }
-                
-                styled_leg = df_legacy[avail_leg_cols].style.format(format_dict_leg)
-                st.dataframe(styled_leg, use_container_width=True, hide_index=True)
-            else:
-                st.info("No legacy signals found.")
-        else:
-            st.info("Legacy watchlist not found.")
 
 # VERIFY CONDITIONS
 elif page == "Verify Conditions":
