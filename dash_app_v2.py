@@ -1,0 +1,208 @@
+import dash
+from dash import Dash, html, dcc, Input, Output, State
+from dash_iconify import DashIconify
+import os
+
+app = Dash(
+    __name__,
+    use_pages=True,
+    pages_folder="dash_pages",
+    suppress_callback_exceptions=True,
+    external_scripts=[
+        {"src": "https://cdn.tailwindcss.com?plugins=forms,container-queries"}
+    ],
+    external_stylesheets=[
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap",
+        "https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+    ]
+)
+
+def get_icon(icon_name):
+    return DashIconify(icon=icon_name, width=18, height=18)
+
+sidebar_header = html.Div(
+    className="flex items-center justify-between mb-xl px-xs",
+    children=[
+        html.Div(
+            id="sidebar-title-container",
+            children=[
+                html.H1("Pro Spike", className="font-headline-sm text-headline-sm text-primary", style={"margin": 0}),
+                html.P("Institutional Grade", className="font-label-caps text-label-caps text-outline whitespace-nowrap", style={"margin": 0})
+            ]
+        ),
+        html.Button(
+            id="sidebar-toggle-btn",
+            className="text-on-surface-variant hover:text-primary transition-colors active:scale-95",
+            children=[DashIconify(icon="material-symbols:menu-open", width=24, height=24, id="sidebar-toggle-icon")]
+        )
+    ]
+)
+
+sidebar_footer = html.Div(
+    className="flex flex-col gap-md mt-auto pt-lg border-t border-outline-variant",
+    children=[
+        html.Button("Trade Now", className="w-full bg-primary text-on-primary font-headline-sm text-headline-sm rounded-lg py-sm min-h-[44px] hover:bg-primary-fixed transition-colors shadow-[0_0_15px_rgba(174,198,255,0.2)]"),
+        html.A([html.Span("help_outline", className="material-symbols-outlined text-lg"), "Support"], href="#", className="flex items-center gap-md px-sm py-sm rounded-lg font-label-caps text-label-caps text-on-surface-variant hover:text-secondary hover:bg-white/5 transition-all duration-200 ease-in-out min-h-[44px]"),
+        html.A([html.Span("logout", className="material-symbols-outlined text-lg"), "Logout"], href="#", className="flex items-center gap-md px-sm py-sm rounded-lg font-label-caps text-label-caps text-on-surface-variant hover:text-secondary hover:bg-white/5 transition-all duration-200 ease-in-out min-h-[44px]"),
+    ]
+)
+
+sidebar = html.Nav(
+    style={"gridColumn": "1 / 2"},
+    className="hidden md:flex flex-col py-lg px-sm gap-xs bg-surface-container-low/80 backdrop-blur-xl h-[calc(100vh-32px)] my-4 ml-4 rounded-2xl sticky left-0 top-4 border border-white/5 shadow-[0_0_40px_rgba(0,0,0,0.5)] z-40",
+    children=[
+        sidebar_header,
+        html.Div(id="sidebar-nav-links", className="flex-1 flex flex-col gap-base"),
+        sidebar_footer
+    ]
+)
+
+top_navbar = html.Header(
+    style={"width": "100%", "flexShrink": "0"},
+    className="hidden md:flex justify-between items-center px-margin-desktop sticky top-0 z-50 bg-surface/80 backdrop-blur-xl h-16 border-b border-outline-variant shadow-sm",
+    children=[
+        html.Div(
+            className="flex-1 max-w-md",
+            children=[
+                html.Div(
+                    className="relative flex items-center h-full",
+                    children=[
+                        DashIconify(icon="material-symbols:temp-preferences-custom", width=20, height=20, className="absolute left-sm text-primary", style={"zIndex": "10"}),
+                        html.Div(
+                            "Ask AI to filter or command... ✨",
+                            style={"background": "transparent", "color": "#8b90a0", "width": "100%", "border": "1px solid #414754", "borderRadius": "9999px", "paddingLeft": "40px", "minHeight": "44px", "display": "flex", "alignItems": "center", "fontSize": "13px"},
+                            className="bg-black/40 pr-sm font-data-mono transition-all hover:border-primary/50 cursor-text"
+                        )
+                    ]
+                )
+            ]
+        ),
+        html.Div(
+            className="flex items-center gap-md",
+            children=[
+                html.Button(
+                    className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-white/5 transition-colors active:scale-95 duration-100 text-on-surface-variant",
+                    children=[DashIconify(icon="material-symbols:notifications-outline", width=24, height=24)]
+                ),
+                html.Button(
+                    className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-white/5 transition-colors active:scale-95 duration-100 text-on-surface-variant",
+                    children=[DashIconify(icon="material-symbols:settings-outline", width=24, height=24)]
+                ),
+                html.Div(
+                    className="relative flex items-center justify-center cursor-pointer group",
+                    children=[
+                        html.Img(
+                            className="w-10 h-10 rounded-full border-2 border-surface-container-high object-cover transition-all duration-300 group-hover:border-primary",
+                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSPGwdD37lUGqWROw7FbCdpsC09lzG81peku_8eXOQ5lhQIBmGTRWYwMd2ih-sO4Efzsi-FiItAyFEtnl9Trh2C_jDb78r21h1SXAIShk7Lhf_L5OCBwvtTYZlfCl35aBGDb6ivgxsHATQLjcZsap-8TF1B9xjyzM-hWf5k2sygd7Lp6MxuWFHkF78sUWs7RkfRQLWbIgfKgboAJMB09guDKkIWZPI0MuAChf6sK8faa-Axtck-uo4kw"
+                        ),
+                        html.Div(className="absolute bottom-0 right-0 w-3 h-3 bg-primary rounded-full border-2 border-surface shadow-[0_0_8px_rgba(90,240,179,0.8)]")
+                    ]
+                )
+            ]
+        )
+    ]
+)
+
+app.layout = html.Div(
+    id="main-layout",
+    style={"display": "grid", "gridTemplateColumns": "272px 1fr", "height": "100vh", "width": "100vw", "overflowX": "hidden", "transition": "grid-template-columns 0.3s ease"},
+    className="bg-background antialiased font-body-md text-on-background",
+    children=[
+        dcc.Store(id="sidebar-state", data={"collapsed": False}),
+        sidebar,
+        # Floating Command Bar
+        html.Div(
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-full bg-surface-container-highest/90 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] cursor-pointer hover:bg-surface-container-highest transition-colors",
+            children=[
+                DashIconify(icon="material-symbols:search", width=20, height=20, className="text-on-surface-variant"),
+                html.Span("Ask AI or search...", className="text-on-surface-variant font-body-md text-sm pr-12"),
+                html.Div(
+                    className="flex items-center gap-1",
+                    children=[
+                        html.Kbd("⌘", className="px-1.5 py-0.5 rounded bg-white/10 text-on-surface-variant text-xs font-data-mono border border-white/5"),
+                        html.Kbd("K", className="px-1.5 py-0.5 rounded bg-white/10 text-on-surface-variant text-xs font-data-mono border border-white/5")
+                    ]
+                )
+            ]
+        ),
+        html.Main(
+            style={"gridColumn": "2 / 3", "display": "flex", "flexDirection": "column", "minWidth": "0", "overflow": "hidden"},
+            children=[
+                dcc.Location(id="url", refresh=False),
+                top_navbar,
+                html.Div(
+                    style={"flex": "1", "overflowY": "auto"},
+                    className="p-margin-mobile md:p-margin-desktop pb-16",
+                    children=[
+                        html.Div(
+                            className="max-w-[1200px] mx-auto w-full",
+                            children=[
+                                dash.page_container
+                            ]
+                        )
+                    ]
+                )
+            ]
+        )
+    ]
+)
+
+@app.callback(
+    Output("sidebar-nav-links", "children"),
+    Input("url", "pathname"),
+    Input("sidebar-state", "data")
+)
+def update_nav(pathname, state):
+    collapsed = state.get("collapsed", False) if state else False
+    NAV_LINKS = [
+        {"name": "Dashboard", "icon": "leaderboard", "path": "/"},
+        {"name": "Signals", "icon": "bolt", "path": "/signals"},
+        {"name": "Institutional Signals", "icon": "shield", "path": "/institutional-signals"},
+        {"name": "Verify Conditions", "icon": "check_circle", "path": "/verify-conditions"},
+        {"name": "Watchlist", "icon": "bookmark", "path": "/watchlist"},
+        {"name": "Win Rate", "icon": "monitoring", "path": "/win-rate"},
+        {"name": "Data Health", "icon": "health_and_safety", "path": "/data-health"}
+    ]
+    base_class = "flex items-center gap-md px-sm py-md rounded-lg font-label-caps text-label-caps transition-all duration-300 ease-in-out min-h-[44px]"
+    active_class = " text-secondary bg-secondary-container/10 border-transparent shadow-[0_0_20px_rgba(174,198,255,0.15)]"
+    inactive_class = " text-on-surface-variant hover:text-secondary hover:bg-white/5"
+
+    items_html = []
+    for item in NAV_LINKS:
+        text_style = {"display": "none"} if collapsed else {}
+        is_active = (pathname == item["path"])
+        cls = base_class + (active_class if is_active else inactive_class)
+        items_html.append(
+            dcc.Link(
+                className=cls,
+                href=item["path"],
+                children=[
+                    html.Span(item["icon"], className="material-symbols-outlined text-lg"),
+                    html.Span(item["name"], style=text_style)
+                ]
+            )
+        )
+    return items_html
+
+@app.callback(
+    Output("main-layout", "style"),
+    Output("sidebar-state", "data"),
+    Output("sidebar-toggle-icon", "icon"),
+    Output("sidebar-title-container", "style"),
+    Input("sidebar-toggle-btn", "n_clicks"),
+    State("sidebar-state", "data"),
+    prevent_initial_call=True
+)
+def toggle_sidebar(n_clicks, state):
+    collapsed = state.get("collapsed", False)
+    new_collapsed = not collapsed
+    
+    new_style = {"display": "grid", "gridTemplateColumns": "80px 1fr" if new_collapsed else "240px 1fr", "minHeight": "100vh", "transition": "grid-template-columns 0.3s ease"}
+    new_icon = "material-symbols:menu" if new_collapsed else "material-symbols:menu-open"
+    new_title_style = {"display": "none"} if new_collapsed else {}
+    
+    return new_style, {"collapsed": new_collapsed}, new_icon, new_title_style
+
+if __name__ == '__main__':
+    os.makedirs("pages", exist_ok=True)
+    app.run(debug=True, port=8050)

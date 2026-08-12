@@ -1,0 +1,254 @@
+import dash
+from dash import html, dcc
+import pandas as pd
+import os
+
+dash.register_page(__name__, path='/', name='Dashboard', title='Pro Spike - Dashboard')
+
+def layout():
+    data_path = os.path.join("data", "active_signals_ranked.csv")
+    total_scanned = 5518
+    active_signals = 0
+    signal_rows = []
+    
+    if os.path.exists(data_path):
+        try:
+            df = pd.read_csv(data_path)
+            active_signals = len(df)
+            
+            # Take top 10 for dashboard preview
+            for i, row in df.head(10).iterrows():
+                sym = str(row.get("SYMBOL", "N/A"))
+                exch = str(row.get("EXCHANGE", "N/A"))
+                try:
+                    close = float(row.get("CLOSE", 0))
+                except:
+                    close = 0.0
+                try:
+                    deliv_per = float(row.get("DELIV_PER", 0))
+                except:
+                    deliv_per = 0.0
+                try:
+                    deliv_turn = float(row.get("DELIVERY_TURNOVER", 0))
+                except:
+                    deliv_turn = 0.0
+                try:
+                    atw = float(row.get("ATW", 0))
+                except:
+                    atw = 0.0
+                
+                # Format turnover in Crores
+                if deliv_turn > 10000000:
+                    turnover_str = f"₹ {deliv_turn / 10000000:.2f}Cr"
+                else:
+                    turnover_str = f"₹ {deliv_turn:,.0f}"
+
+                # Exchange badge styling
+                badge_bg = "bg-[#0070f3]/20 text-[#0070f3] border-[#0070f3]/30" if exch.upper() == "NSE" else "bg-[#34d399]/20 text-[#34d399] border-[#34d399]/30"
+                
+                signal_rows.append(html.Div(
+                    className="glass-panel p-4 rounded-xl mb-3 flex flex-wrap items-center justify-between gap-4 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 cursor-pointer group relative z-10 hover:z-20",
+                    children=[
+                        # Left side: Symbol & Exchange
+                        html.Div(
+                            className="flex items-center gap-4 min-w-[150px]",
+                            children=[
+                                html.Span(className="w-2.5 h-2.5 rounded-full bg-primary inline-block shadow-[0_0_8px_rgba(90,240,179,0.8)]"),
+                                html.Div(
+                                    children=[
+                                        html.Div(sym, className="font-headline-sm text-lg font-semibold text-on-surface group-hover:text-primary transition-colors"),
+                                        html.Div(exch, className=f"text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border {badge_bg} inline-block mt-1")
+                                    ]
+                                )
+                            ]
+                        ),
+                        # Middle: Micro-chart (Sparkline representation)
+                        html.Div(
+                            className="hidden md:flex flex-1 max-w-[120px] items-center gap-2",
+                            children=[
+                                html.Div("CLOSE", className="text-[10px] text-on-surface-variant font-label-caps"),
+                                html.Div(f"{close:,.2f}", className="font-data-md text-on-surface font-medium"),
+                                # Fake sparkline
+                                html.Div(
+                                    className="flex items-end gap-0.5 h-6",
+                                    children=[
+                                        html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[30%]"),
+                                        html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[50%]"),
+                                        html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[40%]"),
+                                        html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[80%]"),
+                                        html.Div(className="w-1 bg-primary rounded-t-sm h-[100%] shadow-[0_0_4px_rgba(90,240,179,0.8)]"),
+                                    ]
+                                )
+                            ]
+                        ),
+                        # Right side: Stats
+                        html.Div(
+                            className="flex items-center gap-6",
+                            children=[
+                                html.Div(
+                                    className="flex flex-col text-right hidden sm:flex",
+                                    children=[
+                                        html.Span("DELIVERY", className="text-[10px] text-on-surface-variant font-label-caps"),
+                                        html.Span(f"{deliv_per:.1f}%", className="font-data-md text-primary font-medium")
+                                    ]
+                                ),
+                                html.Div(
+                                    className="flex flex-col text-right",
+                                    children=[
+                                        html.Span("TURNOVER", className="text-[10px] text-on-surface-variant font-label-caps"),
+                                        html.Span(turnover_str, className="font-data-md text-on-surface font-medium")
+                                    ]
+                                ),
+                                html.Span("arrow_drop_down", className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors")
+                            ]
+                        )
+                    ]
+                ))
+        except Exception as e:
+            signal_rows.append(html.Div(f"Error loading data: {e}", className="p-4 text-error text-center glass-panel rounded-xl"))
+    else:
+        signal_rows.append(html.Div("No active signals today.", className="p-4 font-body-md text-outline text-center glass-panel rounded-xl"))
+
+    return html.Div(
+        className="flex flex-col w-full px-[24px] py-[24px] max-w-[1600px] mx-auto",
+        children=[
+            # Header Row
+            html.Header(
+                className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8",
+                children=[
+                    html.Div([
+                        html.H1(
+                            className="font-display-lg text-[48px] leading-[56px] font-bold text-on-surface mb-2 tracking-tight",
+                            children=[
+                                html.Span("Pro Spike", className="block font-label-sm text-[12px] leading-[16px] font-bold text-primary tracking-widest uppercase mb-1"),
+                                html.Span("Dashboard", className="block font-display-lg text-[48px] leading-[56px] font-bold text-on-surface tracking-tight")
+                            ]
+                        )
+                    ]),
+                    # Live Status Pill
+                    html.Div(
+                        className="relative flex items-center gap-3 px-4 py-2 rounded-full bg-primary/5 border border-primary/20 backdrop-blur-md overflow-hidden animate-shimmer",
+                        children=[
+                            html.Div(className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse-glow z-10"),
+                            html.Span("Live Scanning: Phase 1 MVP", className="font-label-sm text-[12px] font-bold text-primary uppercase tracking-widest z-10 relative")
+                        ]
+                    )
+                ]
+            ),
+            
+            # Bento Grid
+            html.Section(
+                className="grid grid-cols-1 xl:grid-cols-3 gap-6",
+                children=[
+                    # Left Column (Dominant Signals Area - span 2 columns)
+                    html.Div(
+                        className="xl:col-span-2 flex flex-col gap-4",
+                        children=[
+                            html.Div(
+                                className="glass-panel p-6 rounded-2xl flex flex-col relative overflow-hidden h-full",
+                                children=[
+                                    html.Div(className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none"),
+                                    html.Div(
+                                        className="flex justify-between items-end mb-6 z-10",
+                                        children=[
+                                            html.Div(
+                                                children=[
+                                                    html.H2("12-Condition Signals", className="font-headline-lg text-[24px] font-semibold text-on-surface-variant"),
+                                                    html.Div(
+                                                        className="flex items-baseline gap-2 mt-2",
+                                                        children=[
+                                                            html.Span(str(active_signals), className="font-display-lg text-[64px] font-bold text-primary leading-none tracking-tighter animate-number-roll"),
+                                                            html.Span("Signals Passing", className="font-label-sm text-on-surface-variant uppercase tracking-wider")
+                                                        ]
+                                                    )
+                                                ]
+                                            ),
+                                            html.Div(
+                                                className="flex flex-col items-end gap-2",
+                                                children=[
+                                                    html.Span("Hide T2T", className="font-label-sm text-[10px] font-bold text-on-surface-variant uppercase"),
+                                                    html.Div(
+                                                        html.Div(
+                                                            id="toggle",
+                                                            className="relative inline-block w-12 align-middle select-none transition duration-200 ease-in cursor-pointer",
+                                                            children=[
+                                                                html.Div(id="toggle-knob", className="absolute block w-6 h-6 rounded-full bg-surface-container-highest border-2 border-outline-variant z-10 transition-all duration-300 left-0"),
+                                                                html.Div(id="toggle-bg", className="block overflow-hidden h-6 rounded-full bg-surface-container transition-colors duration-300")
+                                                            ]
+                                                        )
+                                                    )
+                                                ]
+                                            )
+                                        ]
+                                    ),
+                                    # Visual Data Grid
+                                    html.Div(
+                                        className="flex flex-col z-10 mt-2",
+                                        children=signal_rows
+                                    )
+                                ]
+                            )
+                        ]
+                    ),
+                    
+                    # Right Column (Stats Tiles - span 1 column)
+                    html.Div(
+                        className="flex flex-col gap-6",
+                        children=[
+                            # Total Stocks Bento Tile
+                            html.Div(
+                                className="glass-panel rounded-2xl p-6 relative overflow-hidden group hover:-translate-y-1 transition-all duration-300 shadow-lg hover:shadow-secondary/10",
+                                children=[
+                                    html.Div(className="absolute top-0 right-0 p-4 text-secondary/20 group-hover:text-secondary/40 transition-colors", children=[html.Span("stacked_bar_chart", className="material-symbols-outlined text-[48px]")]),
+                                    html.Div("Total Scanned", className="font-label-sm text-[12px] font-bold text-on-surface-variant tracking-widest uppercase mb-1"),
+                                    html.Div(f"{total_scanned:,}", className="font-display-lg text-[40px] font-bold text-secondary animate-number-roll"),
+                                    html.Div("As of 07 Aug 2026", className="text-[10px] text-on-surface-variant mt-4")
+                                ]
+                            ),
+                            # Secondary Stats Grid
+                            html.Div(
+                                className="grid grid-cols-2 gap-4",
+                                children=[
+                                    html.Div(
+                                        className="glass-panel rounded-2xl p-5 flex flex-col justify-between hover:bg-white/5 transition-colors",
+                                        children=[
+                                            html.Div("NSE Stocks", className="font-label-sm text-[10px] font-bold text-on-surface-variant uppercase"),
+                                            html.Div("2,543", className="font-headline-md text-[24px] font-semibold text-on-surface mt-2 animate-number-roll")
+                                        ]
+                                    ),
+                                    html.Div(
+                                        className="glass-panel rounded-2xl p-5 flex flex-col justify-between hover:bg-white/5 transition-colors",
+                                        children=[
+                                            html.Div("BSE Stocks", className="font-label-sm text-[10px] font-bold text-on-surface-variant uppercase"),
+                                            html.Div("2,975", className="font-headline-md text-[24px] font-semibold text-on-surface mt-2 animate-number-roll")
+                                        ]
+                                    )
+                                ]
+                            ),
+                            # Action Tile
+                            html.Div(
+                                className="glass-panel rounded-2xl p-6 mt-auto bg-gradient-to-br from-surface-container-high to-surface border-primary/20",
+                                children=[
+                                    html.H3("System Health", className="font-label-sm font-bold text-on-surface-variant uppercase mb-4"),
+                                    html.Div(
+                                        className="flex items-center gap-3 mb-2",
+                                        children=[
+                                            html.Span("check_circle", className="material-symbols-outlined text-primary text-[20px]"),
+                                            html.Span("Real-time data stream optimal", className="text-sm text-on-surface")
+                                        ]
+                                    ),
+                                    html.Div(
+                                        className="flex items-center gap-3",
+                                        children=[
+                                            html.Span("check_circle", className="material-symbols-outlined text-primary text-[20px]"),
+                                            html.Span("ML inference engine idle", className="text-sm text-on-surface")
+                                        ]
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    )

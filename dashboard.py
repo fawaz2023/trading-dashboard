@@ -78,9 +78,9 @@ def log_signal_to_history(symbol, exchange, close, deliv_per, momentum_score):
 def metric(label, value):
     st.markdown(f"<div class='card metric'><div class='label'>{label}</div><div class='value'>{value}</div></div>", unsafe_allow_html=True)
 
-page = st.sidebar.radio("Navigation", ["Dashboard", "Data Health", "Signals", "Institutional Signals", "Verify Conditions", "Watchlist", "Win Rate"])
+page = st.sidebar.radio("Navigation", ["Dashboard", "Data Health", "Signals", "SBIA Institutional Engine", "Verify Conditions", "Watchlist", "Win Rate"])
 st.sidebar.divider()
-exclude_t2t = st.sidebar.checkbox("🚫 Hide 100% Delivery (T2T)", value=True)
+exclude_t2t = st.sidebar.checkbox("Hide 100% Delivery (T2T)", value=True)
 
 
 # DASHBOARD
@@ -377,49 +377,78 @@ elif page == "Signals":
     else:
         st.info("No data available. Run auto_update_smart.py first.")
 
-# INSTITUTIONAL SIGNALS
-elif page == "Institutional Signals":
-    st.markdown("<div class='section'>Institutional Signals (Ranked)</div>", unsafe_allow_html=True)
+# SBIA DUAL-WATCHLIST ARCHITECTURE
+elif page == "SBIA Institutional Engine":
+    st.markdown("<div class='section'>Dual-Watchlist Execution Engine</div>", unsafe_allow_html=True)
     
-    RANKED_FILE = "data/active_signals_ranked.csv"
-    if os.path.exists(RANKED_FILE):
-        df_inst = pd.read_csv(RANKED_FILE)
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            time_filter = st.radio("Timeframe", ["All Active (10 Days)", "Today Only"], horizontal=True)
-        with col2:
-            min_score = st.selectbox("Min Score", [0, 1, 2, 3], index=2, help="Filter by minimum COMBINED_SCORE (0-3 scale based on Binary Option C)")
-        with col3:
-            search_query = st.text_input("Search Symbol", "").upper()
-        with col4:
-            exchange_filter = st.selectbox("Exchange", ["ALL", "NSE", "BSE"])
+    st.markdown("""
+    This page is strictly split into two sections: The prominent **Verified Execution Watchlist (SBIA)** and the **Raw Unverified Legacy List**.
+    """)
+    
+    # --- SBIA LIVE WATCHLIST ---
+    st.markdown("<div class='subsection'>🏆 SBIA Live Execution Watchlist (Verified Low-Drawdown)</div>", unsafe_allow_html=True)
+    st.info("These are the ONLY stocks verified by the low-drawdown ML backtest and approved for execution. They have passed the Baseline Sanity Filters (>₹100 Cr Turnover, >21k Implied Trades, Whale Density 3.5-50.0) AND the Machine Learning AI Gate (Win Probability >= 60.0%).")
+    
+    SBIA_FILE = "data/sbia_institutional_watchlist.csv"
+    if os.path.exists(SBIA_FILE):
+        df_sbia = pd.read_csv(SBIA_FILE)
+        if len(df_sbia) > 0:
+            df_sbia["DATE"] = pd.to_datetime(df_sbia["DATE"], errors="coerce").dt.strftime("%d %b %Y")
             
-        if time_filter == "Today Only":
-            df_inst["DATE"] = pd.to_datetime(df_inst["DATE"], errors="coerce")
-            max_date = df_inst["DATE"].max()
-            df_inst = df_inst[df_inst["DATE"] == max_date]
+            # Format Risk parameters
+            format_dict = {
+                "CLOSE": "₹{:.2f}",
+                "ATR14": "₹{:.2f}",
+                "STOP_LOSS": "₹{:.2f}",
+                "TAKE_PROFIT": "₹{:.2f}",
+                "REC_POS_SIZE_INR": "₹{:,.0f}",
+                "AI_WIN_PROBABILITY": "{:.1f}%",
+                "SIS": "{:.2f}",
+                "Whale_Density": "{:.2f}",
+                "Implied_Trades": "{:,.0f}"
+            }
             
-        # Apply min score filter
-        df_inst = df_inst[df_inst["COMBINED_SCORE"] >= min_score]
-        
-        # Apply search filter
-        if search_query:
-            df_inst = df_inst[df_inst["SYMBOL"].str.contains(search_query, na=False)]
+            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR", "ATR14"]
+            avail_cols = [c for c in display_cols if c in df_sbia.columns]
             
-        # Apply exchange filter
-        if exchange_filter != "ALL":
-            df_inst = df_inst[df_inst["EXCHANGE"] == exchange_filter]
-            
-        if len(df_inst) > 0:
-            st.success(f"Displaying {len(df_inst)} ranked signals (Min Score >= {min_score})")
-            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "COMBINED_SCORE", "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE", "DELIV_PER", "ATW"]
-            avail_cols = [c for c in display_cols if c in df_inst.columns]
-            st.dataframe(df_inst[avail_cols], use_container_width=True, height=600)
+            styled_sbia = df_sbia[avail_cols].style.format(format_dict).background_gradient(subset=["AI_WIN_PROBABILITY"], cmap="Greens")
+            st.dataframe(styled_sbia, use_container_width=True, hide_index=True)
         else:
-            st.info(f"No signals match the selected timeframe and Min Score >= {min_score}.")
+            st.warning("⚠️ No stocks passed the strict ML Gate today. The market environment is hostile to the setup.")
     else:
-        st.warning("⚠️ No ranked signals found. Run the pipeline.")
+        st.warning("Run calculate_active_signals.py to generate the SBIA Watchlist.")
+        
+    st.markdown("<br><br>", unsafe_allow_html=True)
+        
+    # --- LEGACY WATCHLIST ---
+    with st.expander("🔬 Legacy Institutional Screener (Raw ATW Unverified)", expanded=False):
+        st.warning("⚠️ WARNING: These signals have NOT passed the ML gate. They carry a higher risk of being liquidity traps or distribution plays. Provided for visual continuity only.")
+        
+        LEGACY_FILE = "data/legacy_watchlist.csv"
+        if os.path.exists(LEGACY_FILE):
+            df_legacy = pd.read_csv(LEGACY_FILE)
+            if len(df_legacy) > 0:
+                df_legacy["DATE"] = pd.to_datetime(df_legacy["DATE"], errors="coerce").dt.strftime("%d %b %Y")
+                
+                legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR"]
+                avail_leg_cols = [c for c in legacy_cols if c in df_legacy.columns]
+                
+                format_dict_leg = {
+                    "CLOSE": "₹{:.2f}",
+                    "STABILITY_RAW": "{:.2f}",
+                    "STOP_LOSS": "₹{:.2f}",
+                    "TAKE_PROFIT": "₹{:.2f}",
+                    "REC_POS_SIZE_INR": "₹{:,.0f}",
+                    "DELIVERY_TURNOVER": "₹{:,.0f}",
+                    "ATW": "₹{:,.0f}"
+                }
+                
+                styled_leg = df_legacy[avail_leg_cols].style.format(format_dict_leg)
+                st.dataframe(styled_leg, use_container_width=True, hide_index=True)
+            else:
+                st.info("No legacy signals found.")
+        else:
+            st.info("Legacy watchlist not found.")
 
 # VERIFY CONDITIONS
 elif page == "Verify Conditions":

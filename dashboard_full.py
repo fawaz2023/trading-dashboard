@@ -88,9 +88,9 @@ def style_actionable_band(val):
 def metric(label, value):
     st.markdown(f"<div class='card metric'><div class='label'>{label}</div><div class='value'>{value}</div></div>", unsafe_allow_html=True)
 
-page = st.sidebar.radio("Navigation", ["Dashboard", "Signals", "Institutional Signals", "Verify Conditions", "Watchlist", "Win Rate", "Data Health"])
+page = st.sidebar.radio("Navigation", ["Dashboard", "Signals", "SBIA Institutional Engine", "Verify Conditions", "Watchlist", "Win Rate", "Data Health"])
 st.sidebar.divider()
-if st.sidebar.button("🔄 Force Data Refresh", help="Clear cache and reload latest data from disk", use_container_width=True):
+if st.sidebar.button("Force Data Refresh", help="Clear cache and reload latest data from disk", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 exclude_t2t = st.sidebar.checkbox("🚫 Hide 100% Delivery (T2T)", value=True)
@@ -335,138 +335,78 @@ elif page == "Signals":
     else:
         st.info("No data available. Run auto_update_smart.py first.")
 
-# INSTITUTIONAL SIGNALS (now powered by survivors_archive.csv)
-elif page == "Institutional Signals":
-    st.markdown("<div class='section'>Institutional Signals (Rolling 30 Days)</div>", unsafe_allow_html=True)
+# SBIA DUAL-WATCHLIST ARCHITECTURE
+elif page == "SBIA Institutional Engine":
+    st.markdown("<div class='section'>Dual-Watchlist Execution Engine</div>", unsafe_allow_html=True)
     
-    try:
-        live_df = pd.read_csv("data/dashboard_cloud.csv", usecols=["DATE"])
-        calc_date = pd.to_datetime(live_df["DATE"].iloc[0], errors="coerce").strftime("%d %b %Y")
-        st.markdown(f"<p style='color: #a0aec0; margin-top: -10px; margin-bottom: 20px; font-weight: bold;'>⚡ All metrics actively recalculated using market data as of: <span style='color: #00ffcc;'>{calc_date}</span></p>", unsafe_allow_html=True)
-    except:
-        pass
-        
-    with st.expander("🤖 How to read these scores (Machine Learning Insights)"):
-        st.markdown("""
-        **The ML Edge (Based on past 30 days of performance):**
-        * **STABILITY_RAW:** Measures block order size vs the 3-month average. **> 3.16 is the golden threshold.** 
-        * **TRIGGER_COUNT_30D:** **1 is good** (Fresh Accumulation). 3+ is bad (Distribution Trap).
-        * **AI_SCORE:** A percentile score (0.0 to 1.0) that heavily rewards massive block orders on fresh triggers.
-        * *Tip: If a stock has a high COMBINED_SCORE but a low AI_SCORE, it means it has high momentum but no real institutional block orders. Avoid it.*
-        """)
+    st.markdown("""
+    This page is strictly split into two sections: The prominent **Verified Execution Watchlist (SBIA)** and the **Raw Unverified Legacy List**.
+    """)
     
-    HIST_FILE = "data/active_signals_ranked.csv"
-    if os.path.exists(HIST_FILE):
-        df_hist = pd.read_csv(HIST_FILE)
-        df_hist["DATE"] = pd.to_datetime(df_hist["DATE"], errors="coerce")
-        
-        # Summary metrics
-        c1, c2, c3 = st.columns(3)
-        with c1: metric("Total Survivors", f"{len(df_hist)}")
-        with c2: metric("Trading Days", f"{df_hist['DATE'].nunique()}")
-        with c3: metric("Unique Symbols", f"{df_hist['SYMBOL'].nunique()}")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            date_options = ["ALL"] + sorted([d.strftime("%Y-%m-%d") for d in df_hist["DATE"].dt.date.unique()], reverse=True)
-            date_filter = st.selectbox("Trading Date", date_options)
-        with col2:
-            min_score = st.slider("Min Combined Score", 0.0, 1.0, 0.0, 0.05, help="Filter by minimum COMBINED_SCORE (0-1 percentile)")
-        with col3:
-            search_query = st.text_input("Search Symbol", "").upper()
-        with col4:
-            exchange_filter = st.selectbox("Exchange", ["ALL", "NSE", "BSE"])
+    # --- SBIA LIVE WATCHLIST ---
+    st.markdown("<div class='subsection'>🏆 SBIA Live Execution Watchlist (Verified Low-Drawdown)</div>", unsafe_allow_html=True)
+    st.info("These are the ONLY stocks verified by the low-drawdown ML backtest and approved for execution. They have passed the Baseline Sanity Filters (>₹100 Cr Turnover, >21k Implied Trades, Whale Density 3.5-50.0) AND the Machine Learning AI Gate (Win Probability >= 60.0%).")
+    
+    SBIA_FILE = "data/sbia_institutional_watchlist.csv"
+    if os.path.exists(SBIA_FILE):
+        df_sbia = pd.read_csv(SBIA_FILE)
+        if len(df_sbia) > 0:
+            df_sbia["DATE"] = pd.to_datetime(df_sbia["DATE"], errors="coerce").dt.strftime("%d %b %Y")
             
-        # Apply filters
-        if date_filter != "ALL":
-            df_hist = df_hist[df_hist["DATE"].dt.strftime("%Y-%m-%d") == date_filter]
-        if "COMBINED_SCORE" in df_hist.columns:
-            df_hist = df_hist[df_hist["COMBINED_SCORE"] >= min_score]
-        if search_query:
-            df_hist = df_hist[df_hist["SYMBOL"].str.contains(search_query, na=False)]
-        if exchange_filter != "ALL":
-            df_hist = df_hist[df_hist["EXCHANGE"] == exchange_filter]
+            # Format Risk parameters
+            format_dict = {
+                "CLOSE": "₹{:.2f}",
+                "ATR14": "₹{:.2f}",
+                "STOP_LOSS": "₹{:.2f}",
+                "TAKE_PROFIT": "₹{:.2f}",
+                "REC_POS_SIZE_INR": "₹{:,.0f}",
+                "AI_WIN_PROBABILITY": "{:.1f}%",
+                "SIS": "{:.2f}",
+                "Whale_Density": "{:.2f}",
+                "Implied_Trades": "{:,.0f}"
+            }
             
-        if len(df_hist) > 0:
-            if "AI_SCORE" in df_hist.columns:
-                df_hist = df_hist.sort_values(by=["AI_SCORE", "STABILITY_RAW"], ascending=[False, False])
-            else:
-                df_hist = df_hist.sort_values(by=["COMBINED_SCORE"], ascending=[False])
+            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR", "ATR14"]
+            avail_cols = [c for c in display_cols if c in df_sbia.columns]
             
-            # Create FIRST_TRIGGERED from DATE (the day the stock first entered the scanner)
-            df_hist["FIRST_TRIGGERED"] = df_hist["DATE"].dt.strftime("%d %b %Y")
-            
-            # Determine today's date for highlighting
-            today_date = df_hist["DATE"].max()
-            is_today = df_hist["DATE"] == today_date
-            
-            # Add a "🆕" tag to today's signals in the SYMBOL column
-            # Add repeat flags
-            if "REPEAT_FLAG" in df_hist.columns and "TRIGGER_COUNT_30D" in df_hist.columns:
-                mask = df_hist["REPEAT_FLAG"] == True
-                df_hist.loc[mask, "SYMBOL"] = df_hist.loc[mask, "SYMBOL"] + " 🔥(" + df_hist.loc[mask, "TRIGGER_COUNT_30D"].astype(str) + ")"
-            
-            # Tag today's new signals
-            df_hist.loc[is_today, "SYMBOL"] = "🆕 " + df_hist.loc[is_today, "SYMBOL"]
-                
-            if date_filter == "ALL":
-                st.success(f"Displaying {len(df_hist)} survivors across all dates")
-            else:
-                st.success(f"Displaying {len(df_hist)} survivors for {date_filter}")
-
-            # FIRST_TRIGGERED goes at the end (right side)
-            display_cols = ["SYMBOL", "EXCHANGE", "CLOSE", 
-                            "AI_SCORE", "COMBINED_SCORE", 
-                            "TRIGGER_COUNT_30D", "STABILITY_RAW", 
-                            "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "FIRST_TRIGGERED"]
-            avail_cols = [c for c in display_cols if c in df_hist.columns]
-            
-            # Reset index for clean sequential numbering
-            df_hist = df_hist.reset_index(drop=True)
-            
-            # Build the is_today mask aligned to new index
-            today_mask = is_today.values
-            
-            # Apply ML rules and today's highlighting
-            def apply_ml_styles(df_style):
-                styles = pd.DataFrame('', index=df_style.index, columns=df_style.columns)
-                for i, idx in enumerate(df_hist.index):
-                    # Default: today's signals get a light green tint
-                    if i < len(today_mask) and today_mask[i]:
-                        styles.iloc[i] = 'background-color: rgba(72, 187, 120, 0.15);'
-                    
-                    # ML TRAP (Overrides): High triggers = Distribution
-                    if df_hist.iloc[i]['TRIGGER_COUNT_30D'] > 2:
-                        styles.iloc[i] = 'background-color: rgba(255, 76, 76, 0.15); color: #ff4c4c;'
-                    
-                    # ML EDGE (Overrides): Fresh trigger + High Stability
-                    elif df_hist.iloc[i]['TRIGGER_COUNT_30D'] == 1 and df_hist.iloc[i]['STABILITY_RAW'] > 3.16:
-                        styles.iloc[i] = 'background-color: rgba(0, 255, 204, 0.15); color: #00ffcc; font-weight: bold;'
-                        
-                return styles
-            
-            # Apply styling
-            if "DELIV_PER" in avail_cols:
-                styled_df = df_hist[avail_cols].style.map(style_actionable_band, subset=["DELIV_PER"])
-                styled_df = styled_df.apply(lambda _: apply_ml_styles(df_hist[avail_cols]), axis=None)
-                
-                format_dict = {}
-                for raw_col in ["MOMENTUM_RAW", "FOOTPRINT_RAW", "STABILITY_RAW"]:
-                    if raw_col in avail_cols:
-                        format_dict[raw_col] = "{:.2f}"
-                for pct_col in ["COMBINED_SCORE", "AI_SCORE", "MOMENTUM_SCORE", "FOOTPRINT_SCORE", "STABILITY_SCORE"]:
-                    if pct_col in avail_cols:
-                        format_dict[pct_col] = "{:.2f}"
-                if format_dict:
-                    styled_df = styled_df.format(format_dict)
-                    
-                st.dataframe(styled_df, use_container_width=True, height=600, hide_index=True)
-            else:
-                st.dataframe(df_hist[avail_cols], use_container_width=True, height=600, hide_index=True)
+            styled_sbia = df_sbia[avail_cols].style.format(format_dict).background_gradient(subset=["AI_WIN_PROBABILITY"], cmap="Greens")
+            st.dataframe(styled_sbia, use_container_width=True, hide_index=True)
         else:
-            st.info(f"No signals match the selected filters.")
+            st.warning("⚠️ No stocks passed the strict ML Gate today. The market environment is hostile to the setup.")
     else:
-        st.warning("⚠️ No survivor archive found. Run calculate_active_signals.py.")
+        st.warning("Run calculate_active_signals.py to generate the SBIA Watchlist.")
+        
+    st.markdown("<br><br>", unsafe_allow_html=True)
+        
+    # --- LEGACY WATCHLIST ---
+    with st.expander("🔬 Legacy Institutional Screener (Raw ATW Unverified)", expanded=False):
+        st.warning("⚠️ WARNING: These signals have NOT passed the ML gate. They carry a higher risk of being liquidity traps or distribution plays. Provided for visual continuity only.")
+        
+        LEGACY_FILE = "data/legacy_watchlist.csv"
+        if os.path.exists(LEGACY_FILE):
+            df_legacy = pd.read_csv(LEGACY_FILE)
+            if len(df_legacy) > 0:
+                df_legacy["DATE"] = pd.to_datetime(df_legacy["DATE"], errors="coerce").dt.strftime("%d %b %Y")
+                
+                legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR"]
+                avail_leg_cols = [c for c in legacy_cols if c in df_legacy.columns]
+                
+                format_dict_leg = {
+                    "CLOSE": "₹{:.2f}",
+                    "STABILITY_RAW": "{:.2f}",
+                    "STOP_LOSS": "₹{:.2f}",
+                    "TAKE_PROFIT": "₹{:.2f}",
+                    "REC_POS_SIZE_INR": "₹{:,.0f}",
+                    "DELIVERY_TURNOVER": "₹{:,.0f}",
+                    "ATW": "₹{:,.0f}"
+                }
+                
+                styled_leg = df_legacy[avail_leg_cols].style.format(format_dict_leg)
+                st.dataframe(styled_leg, use_container_width=True, hide_index=True)
+            else:
+                st.info("No legacy signals found.")
+        else:
+            st.info("Legacy watchlist not found.")
 
 # VERIFY CONDITIONS
 elif page == "Verify Conditions":

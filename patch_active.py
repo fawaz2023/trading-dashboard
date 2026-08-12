@@ -1,17 +1,139 @@
-with open('calculate_active_signals.py', 'r', encoding='utf-8') as f:
-    content = f.read()
+import pandas as pd
+import numpy as np
+import json
+import os
+import sys
+import io
+import joblib
+import yfinance as yf
 
-import_code = '''
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
+from datetime import datetime, timedelta
+from config import Config
+
+BACKFILL_MODE = False
+INPUT_FILE = Config.COMBINED_FILE if BACKFILL_MODE else "data/combined_dashboard_live.csv"
+CONFIG_FILE = "institutional_config.json"
+
+def score_signals(signals):
+    signals = signals.copy()
+    
+    signals["MOMENTUM_RAW"] = signals.apply(lambda x: x["DELIV_PER"] / x["DELIV_PER_3M"] if pd.notna(x.get("DELIV_PER_3M")) and x["DELIV_PER_3M"] > 0 else 0, axis=1)
+    signals["FOOTPRINT_RAW"] = signals.apply(lambda x: x["DELIVERY_TURNOVER"] / x["DELIVERY_TURNOVER_3M"] if pd.notna(x.get("DELIVERY_TURNOVER_3M")) and x["DELIVERY_TURNOVER_3M"] > 0 else 0, axis=1)
+    signals["STABILITY_RAW"] = signals.apply(lambda x: x["ATW"] / x["ATW_3M"] if pd.notna(x.get("ATW_3M")) and x["ATW_3M"] > 0 else 0, axis=1)
+    
+    # Set Quality Flags
+    signals["HASMOMENTUMDATA"] = signals["DELIV_PER_1W"].notna() & signals["DELIV_PER_1M"].notna()
+    signals["HASFOOTPRINTDATA"] = signals.get("DELIVERY_TURNOVER_1W", pd.Series(dtype=float)).notna() & signals.get("DELIVERY_TURNOVER_1M", pd.Series(dtype=float)).notna()
+    signals["HASSTABILITYHISTORY20D"] = signals["ATW"].notna() & signals.get("ATW_1M", pd.Series(dtype=float)).notna()
+    
+    return signals
+
+def calculate_atr_and_risk(df, equity=1000000, risk_pct=0.015, max_cap_pct=0.10):
+    """Fetch ATR14 from yfinance and calculate Risk parameters"""
+    if df.empty:
+        return df
+        
+    df = df.copy()
+    symbols = df["SYMBOL"].unique().tolist()
+    yf_symbols = [f"{s}.NS" for s in symbols]
+    
+    print(f"Fetching ATR data for {len(symbols)} symbols...")
+    try:
+        # Download last 20 days to ensure we can calculate 14-day ATR
+        data = yf.download(yf_symbols, period="1mo", progress=False, group_by="ticker")
+        
+        df["ATR14"] = np.nan
+        df["STOP_LOSS"] = np.nan
+        df["TAKE_PROFIT"] = np.nan
+        df["REC_POS_SIZE_INR"] = np.nan
+        
+        risk_amount = equity * risk_pct
+        max_position = equity * max_cap_pct
+        
+        for idx, row in df.iterrows():
+            sym = row["SYMBOL"]
+            close_px = row["CLOSE"]
+            
+            try:
+                # Handle single ticker vs multi-ticker dataframe structure from yfinance
+                if len(symbols) == 1:
+                    ticker_df = data
+                else:
+                    ticker_df = data[f"{sym}.NS"]
+                    
+                if not ticker_df.empty and len(ticker_df) >= 14:
+                    # Calculate ATR 14
+                    high_low = ticker_df['High'] - ticker_df['Low']
+                    high_close = np.abs(ticker_df['High'] - ticker_df['Close'].shift())
+                    low_close = np.abs(ticker_df['Low'] - ticker_df['Close'].shift())
+                    
+                    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+                    true_range = np.max(ranges, axis=1)
+                    atr14 = true_range.rolling(14).mean().iloc[-1]
+                    
+                    if pd.notna(atr14) and atr14 > 0:
+                        sl_dist = 2.0 * atr14
+                        tp_dist = 4.0 * atr14
+                        
+                        df.at[idx, "ATR14"] = atr14
+                        df.at[idx, "STOP_LOSS"] = close_px - sl_dist
+                        df.at[idx, "TAKE_PROFIT"] = close_px + tp_dist
+                        
+                        shares_to_buy = risk_amount / sl_dist
+                        pos_size_inr = shares_to_buy * close_px
+                        
+                        # Cap at 10%
+                        if pos_size_inr > max_position:
+                            pos_size_inr = max_position
+                            
+                        df.at[idx, "REC_POS_SIZE_INR"] = pos_size_inr
+            except Exception as e:
+                pass # If ticker fails, leave as NaN
+                
+    except Exception as e:
+        print(f"Failed to fetch ATR data: {e}")
+        
+    return df
+
+def run_scoring():
+    if not os.path.exists(CONFIG_FILE):
+        print(f"ERROR: {CONFIG_FILE} missing.")
+        sys.exit(1)
+        
+    if not os.path.exists(INPUT_FILE):
+        print(f"ERROR: {INPUT_FILE} missing.")
+        sys.exit(1)
+        
+    df = pd.read_csv(INPUT_FILE)
+    df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+    
+    from progressive_screener import ProgressiveSpiker
+    
+    all_scored = []
+    
+    print("Running Progressive Screener on all dates...")
+    for dt in sorted(df["DATE"].dropna().unique()):
+        day_df = df[df["DATE"] == dt].copy()
+        signals = ProgressiveSpiker(day_df).get_signals()
+        if signals.empty:
+            continue
+
+        scored_df = score_signals(signals)
+        if scored_df.empty:
+            continue
+
+        scored_df["DATE"] = pd.to_datetime(scored_df["DATE"], errors="coerce")
+        all_scored.append(scored_df)
+
     archive_path = "data/survivors_archive.csv"
     
-    # 1. Save new signals to archive
     if all_scored:
         scored_df = pd.concat(all_scored, ignore_index=True)
-        print(f"Computed raw ratios for {len(scored_df)} new survivors across {scored_df['DATE'].nunique()} dates")
-        
         keep_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "DELIV_PER", "ATW", "DELIVERY_TURNOVER",
-                     "MOMENTUM_RAW", "FOOTPRINT_RAW", "STABILITY_RAW",
-                     "HASMOMENTUMDATA", "HASFOOTPRINTDATA", "HASSTABILITYHISTORY20D"]
+                     "MOMENTUM_RAW", "FOOTPRINT_RAW", "STABILITY_RAW"]
                      
         for c in keep_cols:
             if c not in scored_df.columns:
@@ -30,99 +152,112 @@ import_code = '''
         
         if not BACKFILL_MODE:
             hist.to_csv(archive_path, index=False)
-            print(f"survivors_archive.csv updated: {len(hist)} rows")
     else:
-        print("No new signals today. Updating existing active signals.")
         if os.path.exists(archive_path):
             hist = pd.read_csv(archive_path)
             hist["DATE"] = pd.to_datetime(hist["DATE"], errors="coerce")
         else:
-            hist = pd.DataFrame()
+            print("No signals found.")
+            sys.exit(0)
             
-    if hist.empty:
-        print("No historical signals to rank.")
-        sys.exit(0)
-        
-    # 2. Filter to 30 days rolling survivors
-    max_date = hist["DATE"].max()
+    # Legacy Pool (30 Days)
     dates_sorted = sorted(hist["DATE"].unique(), reverse=True)
-    cutoff_date = dates_sorted[min(30, len(dates_sorted))-1]
+    legacy_cutoff = dates_sorted[min(30, len(dates_sorted))-1]
+    legacy_pool = hist[hist["DATE"] >= legacy_cutoff].copy()
     
-    recent_pool = hist[hist["DATE"] >= cutoff_date].copy()
-    
-    # 3. Update active signals with LATEST data from combined_dashboard_live.csv
-    # We map the latest fundamental columns from 'df' to 'recent_pool' based on SYMBOL
+    # SBIA Pool (45 Days)
+    sbia_cutoff = dates_sorted[min(45, len(dates_sorted))-1]
+    sbia_pool = hist[hist["DATE"] >= sbia_cutoff].copy()
+
+    # Update latest live data
+    df_latest = df.set_index("SYMBOL")
     update_cols = ["CLOSE", "DELIV_PER", "DELIVERY_TURNOVER", "ATW", 
                    "DELIV_PER_1W", "DELIV_PER_1M", "DELIV_PER_3M", 
                    "DELIVERY_TURNOVER_1W", "DELIVERY_TURNOVER_1M", "DELIVERY_TURNOVER_3M", 
                    "ATW_1W", "ATW_1M", "ATW_3M"]
                    
-    df_latest = df.set_index("SYMBOL")
-    for col in update_cols:
-        if col in df_latest.columns:
-            recent_pool[col] = recent_pool["SYMBOL"].map(df_latest[col]).fillna(recent_pool.get(col, 0))
-            
-    # 4. Recalculate RAW metrics using the updated LIVE data
-    recent_pool = score_signals(recent_pool)
-    
-    # 5. Rank percentiles globally across the recent pool
-    recent_pool["MOMENTUM_SCORE"] = recent_pool["MOMENTUM_RAW"].rank(pct=True, na_option="bottom")
-    recent_pool["FOOTPRINT_SCORE"] = recent_pool["FOOTPRINT_RAW"].rank(pct=True, na_option="bottom")
-    recent_pool["STABILITY_SCORE"] = recent_pool["STABILITY_RAW"].rank(pct=True, na_option="bottom")
-    
-    recent_pool["COMBINED_SCORE"] = (
-        0.4 * recent_pool["MOMENTUM_SCORE"] +
-        0.4 * recent_pool["FOOTPRINT_SCORE"] +
-        0.2 * recent_pool["STABILITY_SCORE"]
-    )
-    
-    # Flag repeat triggers in the last 30 days
-    trigger_counts = recent_pool["SYMBOL"].value_counts()
-    recent_pool["TRIGGER_COUNT_30D"] = recent_pool["SYMBOL"].map(trigger_counts)
-    recent_pool["REPEAT_FLAG"] = recent_pool["TRIGGER_COUNT_30D"] > 1
-    
-    # Calculate ML-Driven AI Score
-    recent_pool["AI_SCORE"] = (
-        0.6 * recent_pool["STABILITY_SCORE"] +
-        0.1 * recent_pool["MOMENTUM_SCORE"] +
-        0.1 * recent_pool["FOOTPRINT_SCORE"] +
-        0.2 * (1.0 / recent_pool["TRIGGER_COUNT_30D"])
-    )
-    
-    # Output artifacts for the dashboard
-    active_path = "data/active_signals_ranked.csv"
-    today_path = "data/signal_scores_today.csv"
-    history_path = "data/signal_scores_history.csv"
-    
-    recent_pool = recent_pool.sort_values(["DATE", "COMBINED_SCORE", "FOOTPRINT_RAW", "SYMBOL"], 
-                                          ascending=[False, False, False, True])
-                                          
-    recent_pool.to_csv(active_path, index=False)
-    recent_pool.to_csv(history_path, index=False)
-    
-    today_scores = recent_pool[recent_pool["DATE"] == max_date].copy()
-    today_scores.to_csv(today_path, index=False)
-    
-    print(f"active_signals_ranked.csv (30-day view) updated and saved: {len(recent_pool)} rows")
-    print(f"signal_scores_today.csv saved: {len(today_scores)} rows")
-    
-    # Process and save T2T rejected signals for ML training
-'''
-
-old_code_start = '''    if not all_scored and not all_t2t_scored:
-        print(f"Loaded 0 signals from {INPUT_FILE}")
-        sys.exit(0)
+    for p in [legacy_pool, sbia_pool]:
+        for col in update_cols:
+            if col in df_latest.columns:
+                p[col] = p["SYMBOL"].map(df_latest[col]).fillna(p.get(col, 0))
         
-    if all_scored:'''
+    legacy_pool = score_signals(legacy_pool)
+    sbia_pool = score_signals(sbia_pool)
+    
+    # Calculate Percentiles
+    for p in [legacy_pool, sbia_pool]:
+        p["MOMENTUM_SCORE"] = p["MOMENTUM_RAW"].rank(pct=True, na_option="bottom")
+        p["FOOTPRINT_SCORE"] = p["FOOTPRINT_RAW"].rank(pct=True, na_option="bottom")
+        p["STABILITY_SCORE"] = p["STABILITY_RAW"].rank(pct=True, na_option="bottom")
+        
+        p["COMBINED_SCORE"] = (
+            0.4 * p["MOMENTUM_SCORE"] +
+            0.4 * p["FOOTPRINT_SCORE"] +
+            0.2 * p["STABILITY_SCORE"]
+        )
+        
+        # Trigger counts
+        trigger_counts = p["SYMBOL"].value_counts()
+        p["TRIGGER_COUNT_30D"] = p["SYMBOL"].map(trigger_counts) # Naming it 30D for compatibility
+        
+        # Raw AI Score (Old)
+        p["AI_SCORE"] = (
+            0.6 * p["STABILITY_SCORE"] +
+            0.1 * p["MOMENTUM_SCORE"] +
+            0.1 * p["FOOTPRINT_SCORE"] +
+            0.2 * (1.0 / p["TRIGGER_COUNT_30D"])
+        )
+        
+    # Apply ML Sanity Filters to SBIA Pool
+    print("Applying SBIA Institutional Machine Learning Filters...")
+    
+    sbia_pool["SIS"] = ((sbia_pool['STABILITY_SCORE'] + 1)**0.50 * 
+                        (sbia_pool['FOOTPRINT_SCORE'] + 1)**0.30 * 
+                        (sbia_pool['MOMENTUM_SCORE'] + 1)**0.20) - 1
+                        
+    sbia_pool['Whale_Density'] = (sbia_pool['ATW'] / sbia_pool['DELIVERY_TURNOVER'].replace(0, np.nan)).fillna(0) * 100000
+    sbia_pool['Implied_Trades'] = (sbia_pool['DELIVERY_TURNOVER'] / sbia_pool['ATW'].replace(0, np.nan)).fillna(0)
+    
+    # 1. Baseline Sanity Filters
+    sanity_mask = (
+        (sbia_pool['DELIVERY_TURNOVER'] > 100000000) &  # > 100 Cr
+        (sbia_pool['Implied_Trades'] > 21000) &
+        (sbia_pool['Whale_Density'].between(3.5, 50.0))
+    )
+    
+    # 2. ML Gate
+    if os.path.exists("shadow_box_model.pkl"):
+        model = joblib.load("shadow_box_model.pkl")
+        features = ['SIS', 'Whale_Density', 'Implied_Trades']
+        
+        # Predict only on those that have all features
+        pred_mask = sbia_pool[features].notna().all(axis=1)
+        sbia_pool.loc[pred_mask, "AI_WIN_PROBABILITY"] = model.predict_proba(sbia_pool.loc[pred_mask, features])[:, 1] * 100
+        sbia_pool["AI_WIN_PROBABILITY"] = sbia_pool["AI_WIN_PROBABILITY"].fillna(0)
+        
+        final_sbia_mask = sanity_mask & (sbia_pool["AI_WIN_PROBABILITY"] >= 60.0)
+        sbia_live_watchlist = sbia_pool[final_sbia_mask].copy()
+    else:
+        print("WARNING: shadow_box_model.pkl not found! Using sanity filters only for SBIA.")
+        sbia_live_watchlist = sbia_pool[sanity_mask].copy()
+        sbia_live_watchlist["AI_WIN_PROBABILITY"] = 0
+        
+    # Calculate Risk Data
+    legacy_watchlist = calculate_atr_and_risk(legacy_pool)
+    sbia_live_watchlist = calculate_atr_and_risk(sbia_live_watchlist)
+    
+    # Sort and Save
+    legacy_watchlist = legacy_watchlist.sort_values(by=["ATW"], ascending=[False])
+    sbia_live_watchlist = sbia_live_watchlist.sort_values(by=["AI_WIN_PROBABILITY", "STABILITY_RAW"], ascending=[False, False])
+    
+    legacy_watchlist.to_csv("data/legacy_watchlist.csv", index=False)
+    sbia_live_watchlist.to_csv("data/sbia_institutional_watchlist.csv", index=False)
+    
+    # Backward compatibility for old Streamlit dashboard while testing
+    legacy_watchlist.to_csv("data/active_signals_ranked.csv", index=False)
+    
+    print(f"Legacy Watchlist saved: {len(legacy_watchlist)} rows")
+    print(f"SBIA Institutional Watchlist saved: {len(sbia_live_watchlist)} rows")
 
-old_code_end = '''    # Process and save T2T rejected signals for ML training'''
-
-if old_code_start in content and old_code_end in content:
-    start_idx = content.find(old_code_start)
-    end_idx = content.find(old_code_end) + len(old_code_end)
-    new_content = content[:start_idx] + import_code + content[end_idx:]
-    with open('calculate_active_signals.py', 'w', encoding='utf-8') as f:
-        f.write(new_content)
-    print("Patched calculate_active_signals.py to update metrics daily!")
-else:
-    print("Failed to find target block in calculate_active_signals.py")
+if __name__ == "__main__":
+    run_scoring()
