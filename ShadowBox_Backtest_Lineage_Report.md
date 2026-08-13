@@ -1,68 +1,64 @@
-# Shadow-Box Institutional Alpha (SBIA) - Backtest Lineage & Strategy Report
+# 📜 Shadow-Box Institutional Alpha: The Complete Backtest Lineage
 
-This document serves as the permanent record of the mathematical evolution of the Shadow-Box engine. It tracks the three major backtest phases, detailing exactly how the strategy logic evolved and the resulting performance metrics.
-
----
-
-## 1. The Baseline: `93_ULTIMATE_patched_backtest`
-**The 12-Condition Cascade Engine**
-
-### 🧠 Strategy Architecture
-* **Entry Logic (Phase 1):** Strict adherence to the 12-condition progressive spike cascade. A stock must pass absolute baseline floors (Delivery $\ge$ 50%, Turnover $\ge$ ₹50L, ATW $\ge$ ₹20k) and demonstrate cascading dominance across all three trailing timeframes (1D > 1W > 1M > 3M) simultaneously for Delivery %, Turnover, and ATW.
-* **ML Bouncer:** Basic AI probability gate. `AI_WIN_PROBABILITY >= 60.0%`. No specific Goldilocks zones enforced.
-* **Exit Strategy:** Fixed Risk-Reward parameters using Dynamic Volatility. Stop Loss at $2.0 \times ATR_{14}$, Take Profit at $4.0 \times ATR_{14}$ (1:2 R:R payout).
-* **Position Sizing:** 1.5% fixed-fractional account risk per trade, but **hard-capped at 10%** of portfolio cash to amputate gap-down tail risk on low-volatility assets.
-
-### 🏆 Performance Results (Dec 2022 - Oct 2024)
-* **Total Trades:** 418
-* **Win Rate:** 50.5%
-* **Profit Factor:** 1.57
-* **Max Drawdown:** 8.39%
-* **Net ROI:** +31.46% (Ending Equity: ₹13,14,602)
+This document serves as the permanent historical record of the system's entire mathematical evolution. It spans dozens of iterations and tens of thousands of lines of code, tracking the engine from its primitive beginnings all the way to the final optimized AI institutional scanner.
 
 ---
 
-## 2. The Refinement: `95_FLEXGATE_accumulation_backtest`
-**The Goldilocks 200-SMA Edition**
+## 🏛️ ERA 1: The Early Momentum Scanners (Scripts 08 - 24)
+*The foundation of the system, focusing strictly on basic price and delivery momentum.*
 
-### 🧠 Strategy Architecture
-* **Entry Logic (Phase 1):** Scrapped the rigid 12-condition cascade in favor of a 5-filter "Base-Loading Consolidation" floor. Required a **200-Day SMA** baseline to ensure macro trend alignment.
-* **Anomaly Tripwires (Phase 2):** Introduced the "Flex-Gates". Instead of beating all timeframes, a stock just needed to trigger *one* of three specific anomalies against its 1-month quiet baseline: Capital Sweep (Turnover), Price-Neutral Whale Spike (ATW/VWAP), or Hoarding Expansion (Delivery %).
-* **ML Bouncer (Phase 3):** Introduced the **Goldilocks Zone**. Rejected setups with an SIS Score outside the 50.0–69.7 range, and required Implied Trades $> 2,100$ to prevent retail dispersion.
-* **Exit Strategy:** Shifted from Fixed R:R to Trend Following. Implemented a **3x ATR Chandelier Trailing Stop**. No fixed take profits—winners run until the trailing stop is breached.
-* **Position Sizing:** Strict 10% hard cap per trade.
-
-### 🏆 Performance Results (July 2023 - Oct 2024) *Delayed start due to 200-SMA*
-* **Total Trades:** 87
-* **Win Rate:** 55.2%
-* **Profit Factor:** 4.84 *(Massive jump due to trailing stop letting winners run)*
-* **Max Drawdown:** 2.65% *(Ironclad defense)*
-* **Net ROI:** +30.81% (Ending Equity: ₹13,08,112)
+* **`08_simple_strategy_backtest.py`**: The very first attempt at a quantitative backtest. Used basic moving averages and price crossovers. Highly susceptible to market noise.
+* **`10_mentor_exact_8conditions.py`**: Integration of the strict "8-Condition Mentor Rules" targeting volume and delivery spikes.
+* **`21_complete_strategy_with_atw.py`**: **Breakthrough.** The first script to introduce `Average Trade Worth (ATW)` as a metric to track ticket sizes, moving the system from retail momentum to institutional tracking.
 
 ---
 
-## 3. The Final Optimized System: `95_ULTIMATE_FLEXGATE_backtest`
-**The ICT Box Edition (Live Production Engine)**
+## 🌊 ERA 2: The Cascade Architecture (Scripts 25 - 69)
+*The introduction of progressive, multi-timeframe dominance.*
 
-### 🧠 Strategy Architecture
-* **Entry Logic (Phase 1):** Maintained the 5-filter Base-Loading floor but **removed the 200-Day SMA requirement** entirely, allowing the system to hunt setups in broader market conditions without a 9-month data warm-up.
-* **Anomaly Tripwires (Phase 2):** Retained Flex-Gates A, B, and C.
-* **ML Bouncer & ICT Clustering (Phase 3):** The ultimate definitive fingerprints derived from pattern recognition. 
-    * Ruthlessly enforced the SIS Goldilocks Zone (50.0 - 70.0).
-    * **ICT Box Confirmation:** A stock must trigger **EXACTLY TWO (2)** accumulation alerts within a rolling 10-day window. (1 is a false start; 3+ is crowded/exhausted).
-* **Exit Strategy:** Retained the highly successful $3x ATR_{14}$ Chandelier Trailing Stop.
-* **Position Sizing:** Strict 10% hard cap per trade.
-
-### 🏆 Performance Results (Dec 2022 - Oct 2024)
-* **Total Trades:** 355
-* **Win Rate:** 53.0%
-* **Profit Factor:** 3.49
-* **Max Drawdown:** 4.13%
-* **Net ROI:** +62.71% (Ending Equity: ₹16,27,184)
+* **`25_complete_11_conditions_backtest.py`**: The birth of the cascade. A stock had to prove momentum across 1D > 1W > 1M > 3M for both Delivery % and Volume.
+* **`57_full_backtest_mentor_strategy.py`**: First deep integration of the 11-condition cascade against multi-year historical data. Proved that the cascade worked, but win rates hovered around 45% due to late entries.
+* **`61_final_realistic_backtest.py`**: Added real-world friction (slippage, taxes) and strict fixed-fractional position sizing.
+* **`69_full_performance_backtest.py`**: The peak of the pure 11-condition logic without Machine Learning. Solid profitability, but suffered during major market corrections due to lack of dynamic risk management.
 
 ---
 
-### 🔑 Conclusion & Production Status
-The `95_ULTIMATE_FLEXGATE` system represents the pinnacle of this research. By discarding the rigid 12-condition cascade and the restrictive 200-SMA, and replacing them with flexible anomaly triggers bound by strict institutional fingerprints (SIS 50-70 & Exactly 2 Triggers in 10 Days), the system achieved a massive **+62.7% ROI** while keeping maximum drawdown confined to a negligible **4.13%**.
+## 🔬 ERA 3: The Hybrid & Strict Realism Phase (Scripts 70 - 91)
+*Optimizing execution and eradicating "fake" signals.*
 
-**This logic is now permanently locked and designated as the primary execution engine for the Streamlit Live Dashboard.**
+* **`80_hybrid_daily_weekly_backtest.py`**: Blended daily momentum triggers with macro weekly structure to filter out low-timeframe noise.
+* **`88_FINAL_complete_backtest_analytics.py`**: Introduced deep analytics on holding periods and drawdown timelines. Proved that cutting losers early was mathematically necessary for swing trading.
+* **`91_STRICT_realistic_backtest.py`**: **The Reality Check.** Implemented brutal T+1 open execution rules, pessimistic slippage, and gap-down modeling. Forced the system to survive true market conditions.
+
+---
+
+## 🤖 ERA 4: The Machine Learning & AI Integration (Scripts 92 - 94)
+*Replacing rigid condition floors with statistical probabilities and Cross-Sectional Ranking.*
+
+* **`92_ML_COMPOUND_backtest.py`**: The first system to use `shadow_box_model.pkl`. Replaced binary checks with percentile scoring (`MOMENTUM_SCORE`, `FOOTPRINT_SCORE`, `STABILITY_SCORE`). 
+* **`93_ULTIMATE_patched_backtest.py`**: The **12-Condition ML Bouncer**. 
+    * **Rules:** Kept the cascading floors but gated entries behind an `AI_WIN_PROBABILITY >= 60.0%`.
+    * **Risk:** $2.0 \times ATR$ Stop / $4.0 \times ATR$ TP. 10% Hard Cap position sizing.
+    * **Result:** 418 Trades | 50.5% Win Rate | 1.57 Profit Factor | +31.46% ROI
+
+---
+
+## 👑 ERA 5: The Flex-Gate & Institutional Fingerprints (Scripts 95 - 96)
+*The finalized, mathematically optimized production engine.*
+
+* **`96_PATTERNS_institutional_fingerprint.py`**: **The Rosetta Stone.** Ran pattern recognition on the 93_Ultimate trades. Discovered that the true drivers of profitability were:
+    1. **Goldilocks Zone:** SIS Score strictly between 50.0 and 70.0.
+    2. **ICT Temporal Clustering:** Exactly 2 accumulation alerts within 10 days.
+    3. **Whale Density Spikes:** Price-normalized ATW surges.
+
+* **`95_FLEXGATE_accumulation_backtest.py`**: 
+    * **Rules:** Introduced "Flex-Gates" (Trigger A, B, C) and required a 200-SMA baseline.
+    * **Exit:** Replaced fixed R:R with the **3x ATR Chandelier Trailing Stop**.
+    * **Result:** 87 Trades | 55.2% Win Rate | 4.84 Profit Factor | +30.81% ROI
+
+* **`95_ULTIMATE_FLEXGATE_backtest.py`**: **The Final Form.**
+    * **Rules:** Dropped the 200-SMA for max coverage. Enforced the absolute institutional fingerprints (SIS 50-70 + Exactly 2 Triggers in 10D).
+    * **Result:** 355 Trades | 53.0% Win Rate | 3.49 Profit Factor | +62.71% ROI | 4.13% Max Drawdown.
+
+---
+**Status:** Legacy analysis is permanently locked. `95_ULTIMATE_FLEXGATE_backtest.py` logic is designated as the master engine.

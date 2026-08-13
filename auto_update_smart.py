@@ -560,6 +560,22 @@ for symbol in symbols:
     # Check if this stock ever had 100% delivery in the processed history
     has_100_deliv = bool((df_stock["DELIV_PER"] >= 99.9).any())
 
+    # Calculate VWAP logic
+    latest_tottrdval = latest.get("TOTTRDVAL", 0)
+    latest_volume = latest.get("TOTTRDQTY", 0)
+    latest_vwap = (latest_tottrdval / latest_volume) if (pd.notna(latest_volume) and latest_volume > 0) else latest.get("CLOSE", 0)
+    
+    # Calculate 1M VWAP (using 22 days)
+    if len(df_1m) > 0:
+        hist_1m_tottrdval = df_1m["TOTTRDVAL"].sum()
+        hist_1m_volume = df_1m["TOTTRDQTY"].sum()
+        vwap_1m = (hist_1m_tottrdval / hist_1m_volume) if (pd.notna(hist_1m_volume) and hist_1m_volume > 0) else df_1m["CLOSE"].mean()
+    else:
+        vwap_1m = latest_vwap
+
+    latest_atw = latest.get("ATW", 0)
+    atw_1m = df_1m["ATW"].mean() if len(df_1m) > 0 else latest_atw
+
     results.append({
         "DATE": latest_dt,
         "SYMBOL": symbol,
@@ -568,7 +584,13 @@ for symbol in symbols:
         "CLOSE": latest.get("CLOSE", 0),
         "DELIV_PER": latest.get("DELIV_PER", 0),
         "DELIVERY_TURNOVER": latest.get("DELIVERY_TURNOVER", 0),
-        "ATW": latest.get("ATW", 0),
+        "TOTAL_TURNOVER": latest_tottrdval,
+        "VOLUME": latest_volume,
+        "VWAP": latest_vwap,
+        "VWAP_1M": vwap_1m,
+        "WHALE_DENSITY": (latest_atw / latest_vwap) if (latest_vwap > 0) else 0,
+        "WHALE_DENSITY_1M": (atw_1m / vwap_1m) if (vwap_1m > 0) else 0,
+        "ATW": latest_atw,
         "EVER_100_DELIV": has_100_deliv,
         "DELIV_PER_1W": df_1w["DELIV_PER"].mean() if len(df_1w) > 0 else latest.get("DELIV_PER", 0),
         "DELIV_PER_1M": df_1m["DELIV_PER"].mean() if len(df_1m) > 0 else latest.get("DELIV_PER", 0),
@@ -576,9 +598,9 @@ for symbol in symbols:
         "DELIVERY_TURNOVER_1W": df_1w["DELIVERY_TURNOVER"].mean() if len(df_1w) > 0 else latest.get("DELIVERY_TURNOVER", 0),
         "DELIVERY_TURNOVER_1M": df_1m["DELIVERY_TURNOVER"].mean() if len(df_1m) > 0 else latest.get("DELIVERY_TURNOVER", 0),
         "DELIVERY_TURNOVER_3M": df_3m["DELIVERY_TURNOVER"].mean() if len(df_3m) > 0 else latest.get("DELIVERY_TURNOVER", 0),
-        "ATW_1W": df_1w["ATW"].mean() if len(df_1w) > 0 else latest.get("ATW", 0),
-        "ATW_1M": df_1m["ATW"].mean() if len(df_1m) > 0 else latest.get("ATW", 0),
-        "ATW_3M": df_3m["ATW"].mean() if len(df_3m) > 0 else latest.get("ATW", 0),
+        "ATW_1W": df_1w["ATW"].mean() if len(df_1w) > 0 else latest_atw,
+        "ATW_1M": atw_1m,
+        "ATW_3M": df_3m["ATW"].mean() if len(df_3m) > 0 else latest_atw,
     })
 
     processed += 1

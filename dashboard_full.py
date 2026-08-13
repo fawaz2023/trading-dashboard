@@ -335,110 +335,169 @@ elif page == "Signals":
     else:
         st.info("No data available. Run auto_update_smart.py first.")
 
-# SBIA DUAL-WATCHLIST ARCHITECTURE
+# MULTI-STRATEGY EXECUTION ENGINE
 elif page == "SBIA Institutional Engine":
-    st.markdown("<div class='section'>Institutional Execution Engine</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section'>Multi-Strategy Execution Engine</div>", unsafe_allow_html=True)
     
     st.markdown("""
     <div style='background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 15px; margin-bottom: 25px;'>
-    This dual-engine system filters raw institutional footprints (Legacy) through a rigorous ML verification gate (SBIA) to eliminate distribution traps.
+    This dual-engine system isolates distinct institutional profiles: High-Velocity Alpha Markups (Path A) and Quiet Base-Loading Breakouts (Path B).
     </div>
     """, unsafe_allow_html=True)
     
-    # --- LEGACY WATCHLIST (TOP) ---
-    st.markdown("<div class='subsection'>🔬 Phase 1: Institutional Screener (Raw ATW Unverified)</div>", unsafe_allow_html=True)
+    tab1, tab2, tab3 = st.tabs(["🔬 Legacy Screener", "🏆 SBIA Alpha Engine (High-Velocity)", "🔭 SBIA FlexGate Engine (Base-Loading)"])
     
-    LEGACY_FILE = "data/legacy_watchlist.csv"
-    if os.path.exists(LEGACY_FILE):
-        df_legacy = pd.read_csv(LEGACY_FILE)
-        if len(df_legacy) > 0:
-            df_legacy["DATE_RAW"] = pd.to_datetime(df_legacy["DATE"], errors="coerce")
-            df_legacy["DATE"] = df_legacy["DATE_RAW"].dt.strftime("%d %b %Y")
-            today_date = df_legacy["DATE_RAW"].max()
-            is_today = df_legacy["DATE_RAW"] == today_date
-            
-            # Tag today's new signals
-            df_legacy.loc[is_today, "SYMBOL"] = "🆕 " + df_legacy.loc[is_today, "SYMBOL"]
-            if "REPEAT_FLAG" in df_legacy.columns and "TRIGGER_COUNT_30D" in df_legacy.columns:
-                mask = (df_legacy["REPEAT_FLAG"] == True) & df_legacy["TRIGGER_COUNT_30D"].notna()
-                df_legacy.loc[mask, "SYMBOL"] = df_legacy.loc[mask, "SYMBOL"] + " 🔥(" + df_legacy.loc[mask, "TRIGGER_COUNT_30D"].astype(str) + ")"
-            
-            legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR"]
-            avail_leg_cols = [c for c in legacy_cols if c in df_legacy.columns]
-            
-            df_legacy = df_legacy.reset_index(drop=True)
-            today_mask = is_today.values
-            
-            def apply_ml_styles(df_style):
-                styles = pd.DataFrame('', index=df_style.index, columns=df_style.columns)
-                for i, _ in enumerate(df_legacy.index):
-                    if i < len(today_mask) and today_mask[i]:
-                        styles.iloc[i] = 'background-color: rgba(72, 187, 120, 0.15);'
-                    if 'TRIGGER_COUNT_30D' in df_legacy.columns and df_legacy.iloc[i]['TRIGGER_COUNT_30D'] > 2:
-                        styles.iloc[i] = 'background-color: rgba(255, 76, 76, 0.15); color: #ff4c4c;'
-                    elif 'TRIGGER_COUNT_30D' in df_legacy.columns and 'STABILITY_RAW' in df_legacy.columns and df_legacy.iloc[i]['TRIGGER_COUNT_30D'] == 1 and df_legacy.iloc[i]['STABILITY_RAW'] > 3.16:
-                        styles.iloc[i] = 'background-color: rgba(0, 255, 204, 0.15); color: #00ffcc; font-weight: bold;'
-                return styles
+    with tab1:
+        st.markdown("<div class='subsection'>🔬 Phase 1: Institutional Screener (Raw ATW Unverified)</div>", unsafe_allow_html=True)
+        
+        LEGACY_FILE = "data/legacy_watchlist.csv"
+        if os.path.exists(LEGACY_FILE):
+            try:
+                df_legacy = pd.read_csv(LEGACY_FILE)
+            except pd.errors.EmptyDataError:
+                df_legacy = pd.DataFrame()
                 
-            format_dict_leg = {
-                "CLOSE": "₹{:.2f}",
-                "STABILITY_RAW": "{:.2f}",
-                "STOP_LOSS": "₹{:.2f}",
-                "TAKE_PROFIT": "₹{:.2f}",
-                "REC_POS_SIZE_INR": "₹{:,.0f}",
-                "DELIVERY_TURNOVER": "₹{:,.0f}",
-                "ATW": "₹{:,.0f}"
-            }
-            
-            styled_leg = df_legacy[avail_leg_cols].style.format(format_dict_leg)
-            if "DELIV_PER" in avail_leg_cols:
-                styled_leg = styled_leg.map(style_actionable_band, subset=["DELIV_PER"])
-            styled_leg = styled_leg.apply(lambda _: apply_ml_styles(df_legacy[avail_leg_cols]), axis=None)
-            
-            st.dataframe(styled_leg, use_container_width=True, hide_index=True)
+            if len(df_legacy) > 0:
+                df_legacy["DATE_RAW"] = pd.to_datetime(df_legacy["DATE"], errors="coerce")
+                df_legacy["DATE"] = df_legacy["DATE_RAW"].dt.strftime("%d %b %Y")
+                today_date = df_legacy["DATE_RAW"].max()
+                is_today = df_legacy["DATE_RAW"] == today_date
+                
+                # Tag today's new signals
+                df_legacy.loc[is_today, "SYMBOL"] = "🆕 " + df_legacy.loc[is_today, "SYMBOL"]
+                if "REPEAT_FLAG" in df_legacy.columns and "TRIGGER_COUNT_30D" in df_legacy.columns:
+                    mask = (df_legacy["REPEAT_FLAG"] == True) & df_legacy["TRIGGER_COUNT_30D"].notna()
+                    df_legacy.loc[mask, "SYMBOL"] = df_legacy.loc[mask, "SYMBOL"] + " 🔥(" + df_legacy.loc[mask, "TRIGGER_COUNT_30D"].astype(str) + ")"
+                
+                if "COMBINED_SCORE" in df_legacy.columns:
+                    df_legacy = df_legacy.drop(columns=["COMBINED_SCORE"])
+                df_legacy = df_legacy.rename(columns={"SIS": "COMBINED_SCORE"})
+                
+                min_score = st.slider("Min Combined Score (SIS)", 0.0, 1.0, 0.0, 0.05)
+                df_legacy = df_legacy[df_legacy["COMBINED_SCORE"] >= min_score]
+                
+                legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_SCORE", "COMBINED_SCORE", "Whale_Density", "Implied_Trades", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR"]
+                avail_leg_cols = [c for c in legacy_cols if c in df_legacy.columns]
+                
+                df_legacy = df_legacy.reset_index(drop=True)
+                today_mask = is_today.values
+                
+                def apply_ml_styles(df_style):
+                    styles = pd.DataFrame('', index=df_style.index, columns=df_style.columns)
+                    for i, _ in enumerate(df_legacy.index):
+                        if i < len(today_mask) and today_mask[i]:
+                            styles.iloc[i] = 'background-color: rgba(72, 187, 120, 0.15);'
+                        if 'TRIGGER_COUNT_30D' in df_legacy.columns and df_legacy.iloc[i]['TRIGGER_COUNT_30D'] > 2:
+                            styles.iloc[i] = 'background-color: rgba(255, 76, 76, 0.15); color: #ff4c4c;'
+                        elif 'TRIGGER_COUNT_30D' in df_legacy.columns and 'STABILITY_RAW' in df_legacy.columns and df_legacy.iloc[i]['TRIGGER_COUNT_30D'] == 1 and df_legacy.iloc[i]['STABILITY_RAW'] > 3.16:
+                            styles.iloc[i] = 'background-color: rgba(0, 255, 204, 0.15); color: #00ffcc; font-weight: bold;'
+                    return styles
+                    
+                format_dict_leg = {
+                    "CLOSE": "₹{:.2f}",
+                    "STABILITY_RAW": "{:.2f}",
+                    "STOP_LOSS": "₹{:.2f}",
+                    "TAKE_PROFIT": "₹{:.2f}",
+                    "REC_POS_SIZE_INR": "₹{:,.0f}",
+                    "DELIVERY_TURNOVER": "₹{:,.0f}",
+                    "ATW": "₹{:,.0f}",
+                    "AI_SCORE": "{:.2f}",
+                    "COMBINED_SCORE": "{:.2f}",
+                    "Whale_Density": "{:.2f}",
+                    "Implied_Trades": "{:,.0f}"
+                }
+                
+                styled_leg = df_legacy[avail_leg_cols].style.format(format_dict_leg).background_gradient(subset=["AI_SCORE"], cmap="YlOrRd")
+                if "DELIV_PER" in avail_leg_cols:
+                    styled_leg = styled_leg.map(style_actionable_band, subset=["DELIV_PER"])
+                styled_leg = styled_leg.apply(lambda _: apply_ml_styles(df_legacy[avail_leg_cols]), axis=None)
+                
+                st.dataframe(styled_leg, use_container_width=True, hide_index=True)
+            else:
+                st.info("No legacy signals found.")
         else:
-            st.info("No legacy signals found.")
-    else:
-        st.info("Legacy watchlist not found.")
+            st.info("Legacy watchlist not found.")
+            
+    with tab2:
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(39, 174, 96, 0.05)); border: 1px solid rgba(46, 204, 113, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+            <h3 style='margin-top: 0; color: #2ecc71; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>🏆</span> Path A: Alpha Markups</h3>
+            <p style='margin-bottom: 0; opacity: 0.9;'>These signals survived the 12-Condition cascade and the AI Bouncer. They are primed for immediate, high-velocity markups.</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-    st.markdown("<br><hr style='border-color: rgba(255,255,255,0.1); margin: 30px 0;'>", unsafe_allow_html=True)
-        
-    # --- SBIA LIVE WATCHLIST (BOTTOM) ---
-    st.markdown("""
-    <div style='background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(39, 174, 96, 0.05)); border: 1px solid rgba(46, 204, 113, 0.4); border-radius: 12px; padding: 20px;'>
-        <h3 style='margin-top: 0; color: #2ecc71; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>🏆</span> Phase 2: SBIA Verified Execution</h3>
-        <p style='margin-bottom: 0; opacity: 0.9;'>These signals have survived the extreme Sanity Filters and the Machine Learning Bouncer. Execute these setups.</p>
-    </div>
-    <br>
-    """, unsafe_allow_html=True)
-    
-    SBIA_FILE = "data/sbia_institutional_watchlist.csv"
-    if os.path.exists(SBIA_FILE):
-        df_sbia = pd.read_csv(SBIA_FILE)
-        if len(df_sbia) > 0:
-            df_sbia["DATE"] = pd.to_datetime(df_sbia["DATE"], errors="coerce").dt.strftime("%d %b %Y")
-            
-            format_dict = {
-                "CLOSE": "₹{:.2f}",
-                "ATR14": "₹{:.2f}",
-                "STOP_LOSS": "₹{:.2f}",
-                "TAKE_PROFIT": "₹{:.2f}",
-                "REC_POS_SIZE_INR": "₹{:,.0f}",
-                "AI_WIN_PROBABILITY": "{:.1f}%",
-                "SIS": "{:.2f}",
-                "Whale_Density": "{:.2f}",
-                "Implied_Trades": "{:,.0f}"
-            }
-            
-            display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR", "ATR14"]
-            avail_cols = [c for c in display_cols if c in df_sbia.columns]
-            
-            styled_sbia = df_sbia[avail_cols].style.format(format_dict).background_gradient(subset=["AI_WIN_PROBABILITY"], cmap="Greens")
-            st.dataframe(styled_sbia, use_container_width=True, hide_index=True)
+        ALPHA_FILE = "data/sbia_alpha_watchlist.csv"
+        if os.path.exists(ALPHA_FILE):
+            try:
+                df_alpha = pd.read_csv(ALPHA_FILE)
+            except pd.errors.EmptyDataError:
+                df_alpha = pd.DataFrame()
+                
+            if len(df_alpha) > 0:
+                if "DATE" in df_alpha.columns:
+                    df_alpha["DATE"] = pd.to_datetime(df_alpha["DATE"], errors="coerce").dt.strftime("%d %b %Y")
+                
+                format_dict = {
+                    "CLOSE": "₹{:.2f}",
+                    "ATR14": "₹{:.2f}",
+                    "STOP_LOSS": "₹{:.2f}",
+                    "TAKE_PROFIT": "₹{:.2f}",
+                    "REC_POS_SIZE_INR": "₹{:,.0f}",
+                    "AI_WIN_PROBABILITY": "{:.1f}%",
+                    "SIS": "{:.2f}",
+                    "Whale_Density": "{:.2f}",
+                    "Implied_Trades": "{:,.0f}"
+                }
+                
+                display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR", "ATR14"]
+                avail_cols = [c for c in display_cols if c in df_alpha.columns]
+                
+                styled_alpha = df_alpha[avail_cols].style.format(format_dict).background_gradient(subset=["AI_WIN_PROBABILITY"], cmap="Greens")
+                st.dataframe(styled_alpha, use_container_width=True, hide_index=True)
+            else:
+                st.warning("⚠️ No stocks passed the Path A ML Gate today.")
         else:
-            st.warning("⚠️ No stocks passed the strict ML Gate today. The market environment is hostile to the setup.")
-    else:
-        st.warning("Run calculate_active_signals.py to generate the SBIA Watchlist.")
+            st.warning("Run calculate_active_signals.py to generate the Alpha Watchlist.")
+            
+    with tab3:
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, rgba(142, 162, 255, 0.1), rgba(11, 124, 255, 0.05)); border: 1px solid rgba(142, 162, 255, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+            <h3 style='margin-top: 0; color: #8ea2ff; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>🔭</span> Path B: Base-Loading (FlexGate)</h3>
+            <p style='margin-bottom: 0; opacity: 0.9;'>These signals survived the ICT Box anomalies (exactly 2 alerts in 10 days). <strong>Trend-Following Notice: No Fixed Profit Target. Use the Chandelier Exit.</strong></p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        FLEXGATE_FILE = "data/sbia_flexgate_watchlist.csv"
+        if os.path.exists(FLEXGATE_FILE):
+            try:
+                df_flex = pd.read_csv(FLEXGATE_FILE)
+            except pd.errors.EmptyDataError:
+                df_flex = pd.DataFrame()
+                
+            if len(df_flex) > 0:
+                if "DATE" in df_flex.columns:
+                    df_flex["DATE"] = pd.to_datetime(df_flex["DATE"], errors="coerce").dt.strftime("%d %b %Y")
+                
+                format_dict = {
+                    "CLOSE": "₹{:.2f}",
+                    "ATR14": "₹{:.2f}",
+                    "CHANDELIER_EXIT": "₹{:.2f}",
+                    "REC_POS_SIZE_INR": "₹{:,.0f}",
+                    "AI_WIN_PROBABILITY": "{:.1f}%",
+                    "SIS": "{:.2f}",
+                    "Whale_Density": "{:.2f}",
+                    "Implied_Trades": "{:,.0f}"
+                }
+                
+                display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "CHANDELIER_EXIT", "REC_POS_SIZE_INR", "ATR14"]
+                avail_cols = [c for c in display_cols if c in df_flex.columns]
+                
+                styled_flex = df_flex[avail_cols].style.format(format_dict).background_gradient(subset=["AI_WIN_PROBABILITY"], cmap="Blues")
+                st.dataframe(styled_flex, use_container_width=True, hide_index=True)
+            else:
+                st.warning("⚠️ No stocks passed the strict FlexGate logic today.")
+        else:
+            st.warning("Run calculate_active_signals.py to generate the FlexGate Watchlist.")
 
 # VERIFY CONDITIONS
 elif page == "Verify Conditions":
