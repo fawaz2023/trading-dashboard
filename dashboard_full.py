@@ -376,7 +376,7 @@ elif page == "SBIA Institutional Engine":
                 min_score = st.slider("Min Combined Score (SIS)", 0.0, 1.0, 0.0, 0.05)
                 df_legacy = df_legacy[df_legacy["COMBINED_SCORE"] >= min_score]
                 
-                legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_SCORE", "COMBINED_SCORE", "Whale_Density", "Implied_Trades", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR"]
+                legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_SCORE", "COMBINED_SCORE", "Whale_Density", "Implied_Trades", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW"]
                 avail_leg_cols = [c for c in legacy_cols if c in df_legacy.columns]
                 
                 df_legacy = df_legacy.reset_index(drop=True)
