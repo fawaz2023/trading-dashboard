@@ -30,10 +30,16 @@ def calculate_atr_and_risk(df, equity=1000000, max_cap_pct=0.10, is_flexgate=Fal
         return df
         
     df = df.copy()
-    symbols = df["SYMBOL"].unique().tolist()
-    yf_symbols = [f"{s}.NS" for s in symbols]
+    symbol_to_yf = {}
+    for idx, row in df.iterrows():
+        sym = row["SYMBOL"]
+        exch = row.get("EXCHANGE", "NSE")
+        suffix = ".BO" if exch == "BSE" else ".NS"
+        symbol_to_yf[sym] = f"{sym}{suffix}"
+        
+    yf_symbols = list(set(symbol_to_yf.values()))
     
-    print(f"Fetching ATR data for {len(symbols)} symbols ({'FlexGate' if is_flexgate else 'Alpha'})...")
+    print(f"Fetching ATR data for {len(yf_symbols)} symbols ({'FlexGate' if is_flexgate else 'Alpha'})...")
     try:
         data = yf.download(yf_symbols, period="1mo", progress=False, group_by="ticker")
         
@@ -50,10 +56,11 @@ def calculate_atr_and_risk(df, equity=1000000, max_cap_pct=0.10, is_flexgate=Fal
             close_px = row["CLOSE"]
             
             try:
-                if len(symbols) == 1:
+                yf_sym = symbol_to_yf[sym]
+                if len(yf_symbols) == 1:
                     ticker_df = data
                 else:
-                    ticker_df = data[f"{sym}.NS"]
+                    ticker_df = data[yf_sym]
                     
                 if not ticker_df.empty and len(ticker_df) >= 14:
                     high_low = ticker_df['High'] - ticker_df['Low']

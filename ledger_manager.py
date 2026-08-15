@@ -44,10 +44,21 @@ def update_sbia_ledger(alpha_watchlist, latest_prices_df, ledger_path="data/sbia
     new_syms = [row['SYMBOL'] for row in new_signals]
     all_needed_symbols = list(set(active_symbols + new_syms))
     
+    symbol_to_yf = {}
+    if not latest_prices_df.empty and 'EXCHANGE' in latest_prices_df.columns:
+        exch_map = latest_prices_df.drop_duplicates('SYMBOL').set_index('SYMBOL')['EXCHANGE'].to_dict()
+    else:
+        exch_map = {}
+
     data = None
     if all_needed_symbols:
-        yf_symbols = [f"{s}.NS" for s in all_needed_symbols]
-        print(f"Fetching historical path data for {len(all_needed_symbols)} symbols...")
+        for s in all_needed_symbols:
+            exch = exch_map.get(s, 'NSE')
+            suffix = ".BO" if exch == "BSE" else ".NS"
+            symbol_to_yf[s] = f"{s}{suffix}"
+            
+        yf_symbols = list(set(symbol_to_yf.values()))
+        print(f"Fetching historical path data for {len(yf_symbols)} symbols...")
         data = yf.download(yf_symbols, period="6mo", progress=False, group_by="ticker")
         
     # 3. Process new signals
@@ -128,10 +139,11 @@ def update_sbia_ledger(alpha_watchlist, latest_prices_df, ledger_path="data/sbia
 
             # Historical Path Check
             if data is not None:
-                if len(all_needed_symbols) == 1:
+                yf_sym = symbol_to_yf.get(sym, f"{sym}.NS")
+                if len(yf_symbols) == 1:
                     ticker_df = data
                 else:
-                    ticker_df = data[f"{sym}.NS"]
+                    ticker_df = data[yf_sym]
                     
                 path_df = ticker_df[ticker_df.index.tz_localize(None) >= entry_dt].copy()
                 path_df = path_df.dropna(subset=['Close'])
