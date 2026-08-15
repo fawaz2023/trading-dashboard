@@ -432,11 +432,22 @@ elif page == "SBIA Institutional Engine":
                 if "DATE" in df_alpha.columns:
                     df_alpha["DATE"] = pd.to_datetime(df_alpha["DATE"], errors="coerce").dt.strftime("%d %b %Y")
                 
+                if "ENTRY_PRICE" in df_alpha.columns:
+                    if "STOP_LOSS" in df_alpha.columns:
+                        df_alpha["STOP_LOSS"] = df_alpha.apply(
+                            lambda r: f"₹{r['STOP_LOSS']:.2f} ({((r['STOP_LOSS'] - r['ENTRY_PRICE']) / r['ENTRY_PRICE']) * 100:.1f}%)" if pd.notna(r['STOP_LOSS']) and pd.notna(r['ENTRY_PRICE']) and r['ENTRY_PRICE'] > 0 else (f"₹{r['STOP_LOSS']:.2f}" if pd.notna(r['STOP_LOSS']) else "N/A"),
+                            axis=1
+                        )
+                    if "TAKE_PROFIT" in df_alpha.columns:
+                        df_alpha["TAKE_PROFIT"] = df_alpha.apply(
+                            lambda r: f"₹{r['TAKE_PROFIT']:.2f} (+{((r['TAKE_PROFIT'] - r['ENTRY_PRICE']) / r['ENTRY_PRICE']) * 100:.1f}%)" if pd.notna(r['TAKE_PROFIT']) and pd.notna(r['ENTRY_PRICE']) and r['ENTRY_PRICE'] > 0 else (f"₹{r['TAKE_PROFIT']:.2f}" if pd.notna(r['TAKE_PROFIT']) else "N/A"),
+                            axis=1
+                        )
+                
                 format_dict = {
+                    "ENTRY_PRICE": "₹{:.2f}",
                     "CLOSE": "₹{:.2f}",
                     "ATR14": "₹{:.2f}",
-                    "STOP_LOSS": "₹{:.2f}",
-                    "TAKE_PROFIT": "₹{:.2f}",
                     "REC_POS_SIZE_INR": "₹{:,.0f}",
                     "AI_WIN_PROBABILITY": "{:.1f}%",
                     "SIS": "{:.2f}",
@@ -444,7 +455,7 @@ elif page == "SBIA Institutional Engine":
                     "Implied_Trades": "{:,.0f}"
                 }
                 
-                display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR", "ATR14"]
+                display_cols = ["DATE", "SYMBOL", "EXCHANGE", "ENTRY_PRICE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR", "ATR14"]
                 avail_cols = [c for c in display_cols if c in df_alpha.columns]
                 
                 styled_alpha = df_alpha[avail_cols].style.format(format_dict).background_gradient(subset=["AI_WIN_PROBABILITY"], cmap="Greens")
@@ -467,11 +478,21 @@ elif page == "SBIA Institutional Engine":
                                     if val == "SUSPENDED": return "color: #f39c12;"
                                     return "color: #95a5a6;"
                                     
+                                if "ENTRY_PRICE" in completed_df.columns:
+                                    if "STOP_LOSS" in completed_df.columns:
+                                        completed_df["STOP_LOSS"] = completed_df.apply(
+                                            lambda r: f"₹{r['STOP_LOSS']:.2f} ({((r['STOP_LOSS'] - r['ENTRY_PRICE']) / r['ENTRY_PRICE']) * 100:.1f}%)" if pd.notna(r['STOP_LOSS']) and pd.notna(r['ENTRY_PRICE']) and r['ENTRY_PRICE'] > 0 else (f"₹{r['STOP_LOSS']:.2f}" if pd.notna(r['STOP_LOSS']) else "N/A"),
+                                            axis=1
+                                        )
+                                    if "TAKE_PROFIT" in completed_df.columns:
+                                        completed_df["TAKE_PROFIT"] = completed_df.apply(
+                                            lambda r: f"₹{r['TAKE_PROFIT']:.2f} (+{((r['TAKE_PROFIT'] - r['ENTRY_PRICE']) / r['ENTRY_PRICE']) * 100:.1f}%)" if pd.notna(r['TAKE_PROFIT']) and pd.notna(r['ENTRY_PRICE']) and r['ENTRY_PRICE'] > 0 else (f"₹{r['TAKE_PROFIT']:.2f}" if pd.notna(r['TAKE_PROFIT']) else "N/A"),
+                                            axis=1
+                                        )
+
                                 format_ledger = {
                                     "ENTRY_PRICE": "₹{:.2f}",
                                     "EXIT_PRICE": "₹{:.2f}",
-                                    "STOP_LOSS": "₹{:.2f}",
-                                    "TAKE_PROFIT": "₹{:.2f}",
                                     "ENTRY_AI_PROB": "{:.1f}%",
                                     "ENTRY_WHALE_DENSITY": "{:.2f}"
                                 }
