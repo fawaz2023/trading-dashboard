@@ -153,9 +153,7 @@ def process_flexgate_engine(df, current_date):
     
     if flexgate_pool.empty:
         print("Path B: No stocks passed Phase 3 (Exactly TWO alerts) today.")
-        empty_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "CHANDELIER_EXIT", "REC_POS_SIZE_INR", "ATR14"]
-        pd.DataFrame(columns=empty_cols).to_csv("data/sbia_flexgate_watchlist.csv", index=False)
-        return flexgate_pool
+        # Proceed with empty pool so the 45-day archiving logic still runs and preserves history
         
     # ML Bouncer for FlexGate
     # Need SIS Score. FlexGate uses the same SIS scoring as Alpha, so we calculate it here.
@@ -174,9 +172,8 @@ def process_flexgate_engine(df, current_date):
     
     # Apply ML Gate & Ranges (97_ULTIMATE_PATTERNS Precision Constraints)
     sanity_mask = (
-        (flexgate_pool['SIS'] <= 36.5) & 
-        (flexgate_pool['Implied_Trades'] >= 9100) &
-        ~(flexgate_pool['Whale_Density'].between(0.25, 0.70, inclusive='both'))
+        (flexgate_pool['DELIVERY_TURNOVER'] > 10000000) &  # > 1 Cr
+        (flexgate_pool['Whale_Density'] > 0)
     )
     
     if os.path.exists("shadow_box_model.pkl"):
@@ -196,8 +193,23 @@ def process_flexgate_engine(df, current_date):
     flexgate_final = calculate_atr_and_risk(flexgate_final, is_flexgate=True)
     flexgate_final = flexgate_final.sort_values(by=["AI_WIN_PROBABILITY"], ascending=[False])
     
-    flexgate_final.to_csv("data/sbia_flexgate_watchlist.csv", index=False)
-    print(f"Path B Output: {len(flexgate_final)} signals written to data/sbia_flexgate_watchlist.csv")
+    FLEXGATE_FILE = "data/sbia_flexgate_watchlist.csv"
+    if os.path.exists(FLEXGATE_FILE):
+        old_flexgate = pd.read_csv(FLEXGATE_FILE)
+        old_flexgate["DATE"] = pd.to_datetime(old_flexgate["DATE"], errors="coerce")
+        # Keep only the last 45 calendar days
+        cutoff = pd.to_datetime(current_date) - pd.Timedelta(days=45)
+        old_flexgate = old_flexgate[old_flexgate["DATE"] >= cutoff]
+        flexgate_final = pd.concat([old_flexgate, flexgate_final], ignore_index=True)
+
+    # Clean up and save
+    if not flexgate_final.empty:
+        flexgate_final["DATE"] = pd.to_datetime(flexgate_final["DATE"], errors="coerce")
+        flexgate_final = flexgate_final.drop_duplicates(subset=["DATE", "SYMBOL", "EXCHANGE"], keep="last")
+        flexgate_final = flexgate_final.sort_values(by=["DATE", "AI_WIN_PROBABILITY"], ascending=[False, False])
+        
+    flexgate_final.to_csv(FLEXGATE_FILE, index=False)
+    print(f"Path B Output: {len(flexgate_final)} signals currently active in {FLEXGATE_FILE}")
     return flexgate_final
 
 
@@ -273,16 +285,21 @@ def run_scoring():
             for col in update_cols:
                 if col in df_latest.columns:
                     p[col] = p["SYMBOL"].map(df_latest[col]).fillna(p.get(col, 0))
-            
+
         legacy_pool = score_signals(legacy_pool)
         sbia_pool = score_signals(sbia_pool)
         
         for p in [legacy_pool, sbia_pool]:
+            
             p["MOMENTUM_SCORE"] = p["MOMENTUM_RAW"].rank(pct=True, na_option="bottom")
             p["FOOTPRINT_SCORE"] = p["FOOTPRINT_RAW"].rank(pct=True, na_option="bottom")
             p["STABILITY_SCORE"] = p["STABILITY_RAW"].rank(pct=True, na_option="bottom")
-            trigger_counts = p["SYMBOL"].value_counts()
-            p["TRIGGER_COUNT_30D"] = p["SYMBOL"].map(trigger_counts)
+            p["DATE"] = pd.to_datetime(p["DATE"], errors="coerce")
+            p["TRIGGER_COUNT_30D"] = 1
+            for idx, row in p.iterrows():
+                window_start = row["DATE"] - pd.Timedelta(days=30)
+                count = p[(p["SYMBOL"] == row["SYMBOL"]) & (p["DATE"] <= row["DATE"]) & (p["DATE"] > window_start)].shape[0]
+                p.at[idx, "TRIGGER_COUNT_30D"] = count
             
             p["AI_SCORE"] = (
                 0.6 * p["STABILITY_SCORE"] +
@@ -314,18 +331,22 @@ def run_scoring():
                 
         # Path A Baseline Sanity
         sanity_mask = (
-            (sbia_pool['DELIVERY_TURNOVER'] > 100000000) &  # > 100 Cr
-            (sbia_pool['Implied_Trades'] > 21000) &
-            (sbia_pool['Whale_Density'].between(3.5, 50.0))
+            (sbia_pool['DELIVERY_TURNOVER'] > 10000000) &  # > 1 Cr
+            (sbia_pool['Whale_Density'] > 0)
         )
         
         final_sbia_mask = sanity_mask & (sbia_pool["AI_WIN_PROBABILITY"] >= 60.0)
         sbia_alpha_watchlist = sbia_pool[final_sbia_mask].copy()
             
+        # Apply Legacy Hard Gates
+        print("Applying Legacy Institutional Ranking Gates...")
+        legacy_mask = (legacy_pool["AI_SCORE"] > 0.60) & (legacy_pool["SIS"].between(0.15, 0.93))
+        legacy_pool = legacy_pool[legacy_mask].copy()
+
         legacy_watchlist = calculate_atr_and_risk(legacy_pool, is_flexgate=False)
         sbia_alpha_watchlist = calculate_atr_and_risk(sbia_alpha_watchlist, is_flexgate=False)
         
-        legacy_watchlist = legacy_watchlist.sort_values(by=["ATW"], ascending=[False])
+        legacy_watchlist = legacy_watchlist.sort_values(by=["SIS"], ascending=[False])
         sbia_alpha_watchlist = sbia_alpha_watchlist.sort_values(by=["AI_WIN_PROBABILITY"], ascending=[False])
         
         legacy_watchlist.to_csv("data/legacy_watchlist.csv", index=False)

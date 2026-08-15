@@ -160,9 +160,9 @@ def run_scoring():
             print("No signals found.")
             sys.exit(0)
             
-    # Legacy Pool (30 Days)
+    # Legacy Pool (45 Days)
     dates_sorted = sorted(hist["DATE"].unique(), reverse=True)
-    legacy_cutoff = dates_sorted[min(30, len(dates_sorted))-1]
+    legacy_cutoff = dates_sorted[min(45, len(dates_sorted))-1]
     legacy_pool = hist[hist["DATE"] >= legacy_cutoff].copy()
     
     # SBIA Pool (45 Days)
@@ -196,9 +196,14 @@ def run_scoring():
             0.2 * p["STABILITY_SCORE"]
         )
         
-        # Trigger counts
-        trigger_counts = p["SYMBOL"].value_counts()
-        p["TRIGGER_COUNT_30D"] = p["SYMBOL"].map(trigger_counts) # Naming it 30D for compatibility
+        # True 30-Day Rolling Trigger Count
+        p["DATE"] = pd.to_datetime(p["DATE"])
+        p["TRIGGER_COUNT_30D"] = 1
+        
+        for idx, row in p.iterrows():
+            window_start = row["DATE"] - pd.Timedelta(days=30)
+            count = p[(p["SYMBOL"] == row["SYMBOL"]) & (p["DATE"] <= row["DATE"]) & (p["DATE"] > window_start)].shape[0]
+            p.at[idx, "TRIGGER_COUNT_30D"] = count
         
         # Raw AI Score (Old)
         p["AI_SCORE"] = (
@@ -208,21 +213,23 @@ def run_scoring():
             0.2 * (1.0 / p["TRIGGER_COUNT_30D"])
         )
         
+        # Institutional ML Metrics (Applied to both Legacy and SBIA)
+        p["SIS"] = ((p['STABILITY_SCORE'] + 1)**0.50 * 
+                    (p['FOOTPRINT_SCORE'] + 1)**0.30 * 
+                    (p['MOMENTUM_SCORE'] + 1)**0.20) - 1
+                    
+
+        
+        p['Whale_Density'] = (p['ATW'] / p['DELIVERY_TURNOVER'].replace(0, np.nan)).fillna(0) * 100000
+        p['Implied_Trades'] = (p['DELIVERY_TURNOVER'] / p['ATW'].replace(0, np.nan)).fillna(0)
+        
     # Apply ML Sanity Filters to SBIA Pool
     print("Applying SBIA Institutional Machine Learning Filters...")
     
-    sbia_pool["SIS"] = ((sbia_pool['STABILITY_SCORE'] + 1)**0.50 * 
-                        (sbia_pool['FOOTPRINT_SCORE'] + 1)**0.30 * 
-                        (sbia_pool['MOMENTUM_SCORE'] + 1)**0.20) - 1
-                        
-    sbia_pool['Whale_Density'] = (sbia_pool['ATW'] / sbia_pool['DELIVERY_TURNOVER'].replace(0, np.nan)).fillna(0) * 100000
-    sbia_pool['Implied_Trades'] = (sbia_pool['DELIVERY_TURNOVER'] / sbia_pool['ATW'].replace(0, np.nan)).fillna(0)
-    
-    # 1. Baseline Sanity Filters
+    # 1. Baseline Sanity Filters (Liquidity only, let the ML model decide the rest)
     sanity_mask = (
-        (sbia_pool['DELIVERY_TURNOVER'] > 100000000) &  # > 100 Cr
-        (sbia_pool['Implied_Trades'] > 21000) &
-        (sbia_pool['Whale_Density'].between(3.5, 50.0))
+        (sbia_pool['DELIVERY_TURNOVER'] > 10000000) &  # > 1 Cr Minimum Delivery Turnover
+        (sbia_pool['Whale_Density'] > 0)
     )
     
     # 2. ML Gate
@@ -242,12 +249,17 @@ def run_scoring():
         sbia_live_watchlist = sbia_pool[sanity_mask].copy()
         sbia_live_watchlist["AI_WIN_PROBABILITY"] = 0
         
+    # Apply Legacy Hard Gates
+    print("Applying Legacy Institutional Ranking Gates...")
+    legacy_mask = (legacy_pool["AI_SCORE"] > 0.60) & (legacy_pool["SIS"].between(0.15, 0.93))
+    legacy_pool = legacy_pool[legacy_mask].copy()
+
     # Calculate Risk Data
     legacy_watchlist = calculate_atr_and_risk(legacy_pool)
     sbia_live_watchlist = calculate_atr_and_risk(sbia_live_watchlist)
     
     # Sort and Save
-    legacy_watchlist = legacy_watchlist.sort_values(by=["ATW"], ascending=[False])
+    legacy_watchlist = legacy_watchlist.sort_values(by=["SIS"], ascending=[False])
     sbia_live_watchlist = sbia_live_watchlist.sort_values(by=["AI_WIN_PROBABILITY", "STABILITY_RAW"], ascending=[False, False])
     
     legacy_watchlist.to_csv("data/legacy_watchlist.csv", index=False)

@@ -79,7 +79,7 @@ else:
     df_combined["DELIV_QTY"] = 0
 
 # Calculate metrics
-df_combined["DELIVERY_TURNOVER"] = df_combined["TOTTRDQTY"] * df_combined["CLOSE"]
+df_combined["DELIVERY_TURNOVER"] = df_combined["DELIV_QTY"] * df_combined["CLOSE"]
 df_combined["ATW"] = df_combined["TOTTRDVAL"] / 1000  # In thousands
 
 # Add progressive columns (1W, 1M, 3M) - placeholder for now

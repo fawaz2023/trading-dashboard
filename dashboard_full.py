@@ -371,12 +371,9 @@ elif page == "SBIA Institutional Engine":
                 
                 if "COMBINED_SCORE" in df_legacy.columns:
                     df_legacy = df_legacy.drop(columns=["COMBINED_SCORE"])
-                df_legacy = df_legacy.rename(columns={"SIS": "COMBINED_SCORE"})
                 
-                min_score = st.slider("Min Combined Score (SIS)", 0.0, 1.0, 0.0, 0.05)
-                df_legacy = df_legacy[df_legacy["COMBINED_SCORE"] >= min_score]
                 
-                legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_SCORE", "COMBINED_SCORE", "Whale_Density", "Implied_Trades", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW"]
+                legacy_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_SCORE", "SIS", "Whale_Density", "Implied_Trades", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW"]
                 avail_leg_cols = [c for c in legacy_cols if c in df_legacy.columns]
                 
                 df_legacy = df_legacy.reset_index(drop=True)
@@ -395,16 +392,14 @@ elif page == "SBIA Institutional Engine":
                     
                 format_dict_leg = {
                     "CLOSE": "₹{:.2f}",
-                    "STABILITY_RAW": "{:.2f}",
-                    "STOP_LOSS": "₹{:.2f}",
-                    "TAKE_PROFIT": "₹{:.2f}",
-                    "REC_POS_SIZE_INR": "₹{:,.0f}",
-                    "DELIVERY_TURNOVER": "₹{:,.0f}",
-                    "ATW": "₹{:,.0f}",
                     "AI_SCORE": "{:.2f}",
-                    "COMBINED_SCORE": "{:.2f}",
+                    "SIS": "{:.2f}",
                     "Whale_Density": "{:.2f}",
-                    "Implied_Trades": "{:,.0f}"
+                    "Implied_Trades": "{:,.0f}",
+                    "STABILITY_RAW": "{:.2f}",
+                    "DELIV_PER": "{:.2f}%",
+                    "DELIVERY_TURNOVER": "₹{:,.0f}",
+                    "ATW": "₹{:,.0f}"
                 }
                 
                 styled_leg = df_legacy[avail_leg_cols].style.format(format_dict_leg).background_gradient(subset=["AI_SCORE"], cmap="YlOrRd")
