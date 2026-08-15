@@ -349,13 +349,18 @@ def run_scoring():
         legacy_watchlist = legacy_watchlist.sort_values(by=["SIS"], ascending=[False])
         sbia_alpha_watchlist = sbia_alpha_watchlist.sort_values(by=["AI_WIN_PROBABILITY"], ascending=[False])
         
+        # Integrate SBIA Ledger to track SL/TP
+        from ledger_manager import update_sbia_ledger
+        print("Updating SBIA Trade Ledger and applying target filters...")
+        sbia_alpha_active, sbia_ledger_full = update_sbia_ledger(sbia_alpha_watchlist, df, ledger_path="data/sbia_ledger.csv")
+
         legacy_watchlist.to_csv("data/legacy_watchlist.csv", index=False)
-        sbia_alpha_watchlist.to_csv("data/sbia_alpha_watchlist.csv", index=False)
-        
+        sbia_alpha_active.to_csv("data/sbia_alpha_watchlist.csv", index=False)
+
         # Backward compatibility for existing dashboard code expecting this file
-        sbia_alpha_watchlist.to_csv("data/sbia_institutional_watchlist.csv", index=False)
-        
-        print(f"Path A Output: {len(sbia_alpha_watchlist)} signals written to data/sbia_alpha_watchlist.csv")
+        sbia_alpha_active.to_csv("data/sbia_institutional_watchlist.csv", index=False)
+
+        print(f"Path A Output: {len(sbia_alpha_active)} ACTIVE signals written to data/sbia_alpha_watchlist.csv")
     else:
         print("Path A Output: No signals generated.")
 

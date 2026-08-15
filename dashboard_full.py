@@ -449,6 +449,42 @@ elif page == "SBIA Institutional Engine":
                 
                 styled_alpha = df_alpha[avail_cols].style.format(format_dict).background_gradient(subset=["AI_WIN_PROBABILITY"], cmap="Greens")
                 st.dataframe(styled_alpha, use_container_width=True, hide_index=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("🕰️ Historical / Completed Trades"):
+                    if os.path.exists("data/sbia_ledger.csv"):
+                        try:
+                            ledger_df = pd.read_csv("data/sbia_ledger.csv")
+                            completed_df = ledger_df[ledger_df["STATUS"] != "ACTIVE"].copy()
+                            
+                            if len(completed_df) > 0:
+                                completed_df["ENTRY_DATE"] = pd.to_datetime(completed_df["ENTRY_DATE"], errors="coerce").dt.strftime("%d %b %Y")
+                                completed_df["EXIT_DATE"] = pd.to_datetime(completed_df["EXIT_DATE"], errors="coerce").dt.strftime("%d %b %Y")
+                                
+                                def color_status(val):
+                                    if val == "HIT_TP": return "color: #2ecc71; font-weight: bold;"
+                                    if val == "HIT_SL": return "color: #e74c3c; font-weight: bold;"
+                                    if val == "SUSPENDED": return "color: #f39c12;"
+                                    return "color: #95a5a6;"
+                                    
+                                format_ledger = {
+                                    "ENTRY_PRICE": "₹{:.2f}",
+                                    "EXIT_PRICE": "₹{:.2f}",
+                                    "STOP_LOSS": "₹{:.2f}",
+                                    "TAKE_PROFIT": "₹{:.2f}"
+                                }
+                                
+                                disp_cols = ["ENTRY_DATE", "SYMBOL", "STATUS", "ENTRY_PRICE", "EXIT_PRICE", "EXIT_DATE", "STOP_LOSS", "TAKE_PROFIT"]
+                                avail_ledger = [c for c in disp_cols if c in completed_df.columns]
+                                
+                                st.dataframe(
+                                    completed_df[avail_ledger].style.map(color_status, subset=["STATUS"]).format(format_ledger),
+                                    use_container_width=True, hide_index=True
+                                )
+                            else:
+                                st.info("No completed trades recorded yet.")
+                        except Exception as e:
+                            st.error(f"Error loading ledger: {e}")
             else:
                 st.warning("⚠️ No stocks passed the Path A ML Gate today.")
         else:
