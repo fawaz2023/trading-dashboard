@@ -17,7 +17,9 @@ def update_sbia_ledger(alpha_watchlist, latest_prices_df, ledger_path="data/sbia
         ledger_df = pd.read_csv(ledger_path)
     else:
         ledger_df = pd.DataFrame(columns=[
-            'ENTRY_DATE', 'SYMBOL', 'ENTRY_PRICE', 'ATR14', 'STOP_LOSS', 'TAKE_PROFIT', 'STATUS', 'EXIT_DATE', 'EXIT_PRICE'
+            'ENTRY_DATE', 'SYMBOL', 'ENTRY_PRICE', 'ATR14', 'STOP_LOSS', 'TAKE_PROFIT', 
+            'ENTRY_AI_PROB', 'ENTRY_WHALE_DENSITY', 'ENTRY_IMPLIED_TRADES',
+            'STATUS', 'EXIT_DATE', 'EXIT_PRICE'
         ])
         
     ledger_df['ENTRY_DATE'] = pd.to_datetime(ledger_df['ENTRY_DATE'])
@@ -90,6 +92,9 @@ def update_sbia_ledger(alpha_watchlist, latest_prices_df, ledger_path="data/sbia
                         'ATR14': atr14,
                         'STOP_LOSS': sl,
                         'TAKE_PROFIT': tp,
+                        'ENTRY_AI_PROB': row.get('AI_WIN_PROBABILITY', np.nan),
+                        'ENTRY_WHALE_DENSITY': row.get('Whale_Density', np.nan),
+                        'ENTRY_IMPLIED_TRADES': row.get('Implied_Trades', np.nan),
                         'STATUS': 'ACTIVE',
                         'EXIT_DATE': pd.NaT,
                         'EXIT_PRICE': np.nan

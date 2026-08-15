@@ -471,10 +471,12 @@ elif page == "SBIA Institutional Engine":
                                     "ENTRY_PRICE": "₹{:.2f}",
                                     "EXIT_PRICE": "₹{:.2f}",
                                     "STOP_LOSS": "₹{:.2f}",
-                                    "TAKE_PROFIT": "₹{:.2f}"
+                                    "TAKE_PROFIT": "₹{:.2f}",
+                                    "ENTRY_AI_PROB": "{:.1f}%",
+                                    "ENTRY_WHALE_DENSITY": "{:.2f}"
                                 }
                                 
-                                disp_cols = ["ENTRY_DATE", "SYMBOL", "STATUS", "ENTRY_PRICE", "EXIT_PRICE", "EXIT_DATE", "STOP_LOSS", "TAKE_PROFIT"]
+                                disp_cols = ["ENTRY_DATE", "SYMBOL", "STATUS", "ENTRY_AI_PROB", "ENTRY_WHALE_DENSITY", "ENTRY_PRICE", "EXIT_PRICE", "EXIT_DATE", "STOP_LOSS", "TAKE_PROFIT"]
                                 avail_ledger = [c for c in disp_cols if c in completed_df.columns]
                                 
                                 st.dataframe(
