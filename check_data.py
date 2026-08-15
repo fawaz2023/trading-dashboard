@@ -1,18 +1,12 @@
 import pandas as pd
-from config import Config
 
-df = pd.read_csv(Config.COMBINED_FILE)
+file_path = r'c:\Users\fawaz\Desktop\trading_dashboard\data\historical_full_universe.csv'
 
-print(f"Total rows: {len(df)}")
-print(f"\nColumns: {list(df.columns)}")
-print(f"\nFirst 5 rows:")
-print(df.head())
+print("Loading dataset...")
+df = pd.read_csv(file_path, parse_dates=['DATE'])
 
-print(f"\n--- Data Quality Check ---")
-print(f"Rows with CLOSE > 0: {len(df[df['CLOSE'] > 0])}")
-print(f"Rows with CLOSE = 0: {len(df[df['CLOSE'] == 0])}")
-print(f"Rows with DELIV_PER >= 50: {len(df[df['DELIV_PER'] >= 50])}")
-print(f"Rows with DELIVERY_TURNOVER >= 5M: {len(df[df['DELIVERY_TURNOVER'] >= 5000000])}")
-
-print(f"\n--- Sample of non-zero prices ---")
-print(df[df['CLOSE'] > 0].head())
+print("\n--- Dataset Summary ---")
+print(f"Total Rows: {len(df):,}")
+print(f"Date Range: {df['DATE'].min().date()} to {df['DATE'].max().date()}")
+print(f"Total Unique Symbols: {df['SYMBOL'].nunique():,}")
+print("-----------------------")

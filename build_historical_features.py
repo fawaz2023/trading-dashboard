@@ -52,6 +52,7 @@ def normalize_bse(bhav_df, deliv_df):
         "TtlTradgVol": "TOTTRDQTY",
         "TtlTrfVal": "TOTTRDVAL",
         "TtlNbOfTxsExctd": "NO_OF_TRADES",
+        "FinInstrmId": "SC_CODE"
     }
     df = bhav_df.rename(columns=ren).copy()
     
@@ -66,19 +67,36 @@ def normalize_bse(bhav_df, deliv_df):
     if not deliv_df.empty:
         ren_del = {"BizDt": "DATE", "TckrSymb": "SYMBOL", "DlvrdQty": "DELIV_QTY", "DlvryPct": "DELIV_PER"}
         del_df = deliv_df.rename(columns=ren_del)
-        del_df["SYMBOL"] = del_df["SYMBOL"].astype(str)
+        # In newer BSE delivery formats, the numeric SC_CODE might be under SYMBOL
+        if "SYMBOL" in del_df.columns and "SC_CODE" not in del_df.columns:
+            # If all symbols are numeric, they are actually scrip codes
+            if pd.to_numeric(del_df["SYMBOL"], errors="coerce").notna().all():
+                del_df = del_df.rename(columns={"SYMBOL": "SC_CODE"})
+        
+        if "SC_CODE" in del_df.columns:
+            del_df["SC_CODE"] = del_df["SC_CODE"].astype(str)
+        if "SYMBOL" in del_df.columns:
+            del_df["SYMBOL"] = del_df["SYMBOL"].astype(str)
+            
         if "DATE" in del_df.columns: del_df["DATE"] = pd.to_datetime(del_df["DATE"], errors="coerce")
         cols_keep = [c for c in ["SYMBOL", "DATE", "DELIV_PER", "DELIV_QTY", "SC_CODE"] if c in del_df.columns]
         
         if "SC_CODE" in df.columns and "SC_CODE" in del_df.columns:
             df["SC_CODE"] = df["SC_CODE"].astype(str)
-            del_df["SC_CODE"] = del_df["SC_CODE"].astype(str)
             df = df.merge(del_df[cols_keep], on=["SC_CODE", "DATE"], how="left", suffixes=("", "_del"))
             if "SYMBOL_del" in df.columns:
                 df["SYMBOL"] = df["SYMBOL"].fillna(df["SYMBOL_del"])
                 df = df.drop(columns=["SYMBOL_del"])
         else:
-            df = df.merge(del_df[cols_keep], on=["SYMBOL", "DATE"], how="left")
+            df = df.merge(del_df[cols_keep], on=["SYMBOL", "DATE"], how="left", suffixes=("", "_del"))
+            
+        # Overwrite with delivery data if available
+        if "DELIV_PER_del" in df.columns:
+            df["DELIV_PER"] = df["DELIV_PER_del"].fillna(df.get("DELIV_PER", 0))
+            df = df.drop(columns=["DELIV_PER_del"])
+        if "DELIV_QTY_del" in df.columns:
+            df["DELIV_QTY"] = df["DELIV_QTY_del"].fillna(df.get("DELIV_QTY", 0))
+            df = df.drop(columns=["DELIV_QTY_del"])
 
     for c in ["DELIV_PER", "DELIV_QTY"]:
         if c not in df.columns:
@@ -153,7 +171,9 @@ def load_data():
         df_all = df_all.drop(columns=["EXCH_PRIORITY"])
     
     df_all["DELIVERY_TURNOVER"] = df_all["DELIV_QTY"] * df_all["CLOSE"]
-    df_all["ATW"] = (df_all["TOTTRDVAL"] / df_all["NO_OF_TRADES"].replace(0, pd.NA)).fillna(0)
+    
+    # Fix pandas downcasting warning by inferring objects first, or avoiding NA replacement
+    df_all["ATW"] = (df_all["TOTTRDVAL"] / df_all["NO_OF_TRADES"].replace({0: np.nan})).fillna(0)
     
     return df_all
 
@@ -210,7 +230,9 @@ if __name__ == "__main__":
     
     out_file = "data/historical_full_universe.csv"
     os.makedirs("data", exist_ok=True)
-    df_features.to_csv(out_file, index=False)
-    
-    print(f"✅ Saved {len(df_features)} historical rows to {out_file}")
+    try:
+        df_features.to_csv(out_file, index=False)
+        print(f"Saved {len(df_features)} historical rows to {out_file}")
+    except Exception as e:
+        print(f"Error saving features: {e}")
     print("Run `evaluate_institutional_edge.py` to backtest.")

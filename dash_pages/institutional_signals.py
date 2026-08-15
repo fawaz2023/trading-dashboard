@@ -6,6 +6,49 @@ import os
 dash.register_page(__name__, path='/institutional-signals', name='Institutional Signals', title='Pro Spike - Institutional Signals')
 
 def layout():
+    # Load Real Data from Active Signals
+    try:
+        df = pd.read_csv("data/active_signals_ranked.csv")
+        df = df.head(50) # top 50 signals
+    except Exception:
+        df = pd.DataFrame()
+
+    def format_crores(val):
+        if pd.isna(val) or val == 0: return "-"
+        return f"₹{val/10000000:.1f}Cr"
+        
+    def format_surge(val):
+        if pd.isna(val) or val == 0: return "-"
+        pct = (val - 1.0) * 100
+        sign = "+" if pct > 0 else ""
+        return f"{sign}{pct:.0f}%"
+
+    real_data = []
+    for _, r in df.iterrows():
+        # Score calculation
+        score = int(r.get("AI_SCORE", 0) * 100) if "AI_SCORE" in df.columns else int(r.get("COMBINED_SCORE", 0) * 100)
+        
+        # Surge formatting
+        surge_val = r.get("MOMENTUM_RAW", 1.0)
+        surge_str = format_surge(surge_val)
+        is_positive = (surge_val >= 1.0)
+        
+        real_data.append({
+            "sym": str(r.get("SYMBOL", "N/A")),
+            "name": str(r.get("EXCHANGE", "NSE")),
+            "icon": "memory" if r.get("EXCHANGE") == "NSE" else "business",
+            "price": f"₹{r.get('CLOSE', 0):.2f}",
+            "surge": surge_str,
+            "surge_color": "text-primary" if is_positive else "text-error",
+            "deliv": f"{r.get('DELIV_PER_1M', 0):.1f}%",
+            "turnover": format_crores(r.get("DELIVERY_TURNOVER_1M", 0)),
+            "blocks": str(int(r.get("TRIGGER_COUNT_30D", 0))),
+            "score": score,
+            "score_color": "text-primary" if score >= 80 else ("text-secondary" if score >= 60 else "text-on-surface-variant"),
+            "bar_bg": "bg-primary" if score >= 80 else ("bg-secondary" if score >= 60 else "bg-on-surface-variant"),
+            "bar_shadow": "shadow-[0_0_8px_rgba(90,240,179,0.8)]" if score >= 80 else ""
+        })
+
     header_section = html.Div(
         className="px-4 md:px-6 pt-6 pb-2 w-full flex flex-col gap-6",
         children=[
@@ -29,15 +72,15 @@ def layout():
                         children=[
                             html.P(
                                 [
-                                    html.Strong("NVDA ", className="text-on-surface"),
+                                    html.Strong(f"{real_data[0]['sym']} " if real_data else "MARKET ", className="text-on-surface"),
                                     "is experiencing a ",
-                                    html.Span("345% volume spike", className="text-primary font-semibold"),
-                                    ", correlating with a recent institutional options sweep and positive sector sentiment."
+                                    html.Span(f"{real_data[0]['surge']} volume surge" if real_data else "strong volume surge", className="text-primary font-semibold"),
+                                    ", correlating with high institutional delivery accumulation over a 30-day rolling window."
                                 ],
                                 className="font-body-md text-on-surface-variant leading-relaxed"
                             ),
                             html.Button(
-                                "Generate full trade thesis →",
+                                "Generate full trade thesis \u2192",
                                 className="text-primary text-sm font-semibold hover:underline self-start mt-1 cursor-pointer hover:text-primary-fixed transition-colors"
                             )
                         ]
@@ -86,17 +129,8 @@ def layout():
         ]
     )
 
-    # Mock Data Rows based on the Stitch HTML
-    mock_data = [
-        {"sym": "NVDA", "name": "Nvidia Corp", "icon": "memory", "price": "$1,245.60", "surge": "+345%", "surge_color": "text-primary", "deliv": "12.4M", "turnover": "$15.4B", "blocks": "42", "score": 98, "score_color": "text-primary", "bar_bg": "bg-primary", "bar_shadow": "shadow-[0_0_8px_rgba(90,240,179,0.8)]"},
-        {"sym": "CRWD", "name": "CrowdStrike", "icon": "cloud", "price": "$312.45", "surge": "+210%", "surge_color": "text-primary", "deliv": "4.2M", "turnover": "$1.3B", "blocks": "18", "score": 92, "score_color": "text-primary", "bar_bg": "bg-primary", "bar_shadow": "shadow-[0_0_8px_rgba(90,240,179,0.8)]"},
-        {"sym": "AAPL", "name": "Apple Inc", "icon": "devices", "price": "$189.20", "surge": "+45%", "surge_color": "text-secondary", "deliv": "45.1M", "turnover": "$8.5B", "blocks": "12", "score": 75, "score_color": "text-secondary", "bar_bg": "bg-secondary", "bar_shadow": ""},
-        {"sym": "TSLA", "name": "Tesla Inc", "icon": "electric_car", "price": "$175.34", "surge": "-12%", "surge_color": "text-error", "deliv": "88.3M", "turnover": "$15.5B", "blocks": "6", "score": 42, "score_color": "text-on-surface-variant", "bar_bg": "bg-on-surface-variant", "bar_shadow": ""},
-        {"sym": "PLTR", "name": "Palantir Tech", "icon": "dataset", "price": "$24.80", "surge": "+185%", "surge_color": "text-primary", "deliv": "15.2M", "turnover": "$376M", "blocks": "24", "score": 88, "score_color": "text-primary", "bar_bg": "bg-primary", "bar_shadow": "shadow-[0_0_8px_rgba(90,240,179,0.8)]"},
-    ]
-
     table_rows = []
-    for row in mock_data:
+    for row in real_data:
         # Determine icon background based on whether it's a primary or neutral icon
         icon_bg = "bg-secondary-container/20 text-secondary border border-secondary/30" if row["sym"] != "AAPL" else "bg-surface-bright text-on-surface-variant border border-white/10"
         
