@@ -140,12 +140,12 @@ def process_flexgate_engine(df, current_date):
     
     # Find all unique trading dates in archive
     all_dates = sorted(updated_archive['DATE'].unique())
-    last_10_dates = all_dates[-10:] if len(all_dates) >= 10 else all_dates
+    last_21_dates = all_dates[-21:] if len(all_dates) >= 21 else all_dates
     
-    # Filter to last 10 dates
-    recent_archive = updated_archive[updated_archive['DATE'].isin(last_10_dates)]
+    # Filter to last 21 dates
+    recent_archive = updated_archive[updated_archive['DATE'].isin(last_21_dates)]
     
-    # Phase 3: Exactly TWO accumulation alerts in trailing 10 days
+    # Phase 3: Exactly TWO accumulation alerts in trailing 21 days
     trigger_counts = recent_archive['SYMBOL'].value_counts()
     exact_two_symbols = trigger_counts[trigger_counts == 2].index.tolist()
     
@@ -183,12 +183,15 @@ def process_flexgate_engine(df, current_date):
         flexgate_pool.loc[pred_mask, "AI_WIN_PROBABILITY"] = model.predict_proba(flexgate_pool.loc[pred_mask, features])[:, 1] * 100
         flexgate_pool["AI_WIN_PROBABILITY"] = flexgate_pool["AI_WIN_PROBABILITY"].fillna(0)
         
-        final_mask = sanity_mask & (flexgate_pool["AI_WIN_PROBABILITY"] >= 60.0)
-        flexgate_final = flexgate_pool[final_mask].copy()
+        # We no longer block based on AI probability. We just use sanity mask.
+        flexgate_final = flexgate_pool[sanity_mask].copy()
+        # Add a flag for UI
+        flexgate_final["AI_APPROVED"] = flexgate_final["AI_WIN_PROBABILITY"] >= 60.0
     else:
         print("WARNING: shadow_box_model.pkl missing! FlexGate running without AI.")
         flexgate_final = flexgate_pool[sanity_mask].copy()
         flexgate_final["AI_WIN_PROBABILITY"] = 0
+        flexgate_final["AI_APPROVED"] = False
         
     flexgate_final = calculate_atr_and_risk(flexgate_final, is_flexgate=True)
     flexgate_final = flexgate_final.sort_values(by=["AI_WIN_PROBABILITY"], ascending=[False])

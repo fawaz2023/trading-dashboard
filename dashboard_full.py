@@ -521,7 +521,7 @@ elif page == "SBIA Institutional Engine":
         st.markdown("""
         <div style='background: linear-gradient(135deg, rgba(142, 162, 255, 0.1), rgba(11, 124, 255, 0.05)); border: 1px solid rgba(142, 162, 255, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
             <h3 style='margin-top: 0; color: #8ea2ff; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>🔭</span> Path B: Base-Loading (FlexGate)</h3>
-            <p style='margin-bottom: 0; opacity: 0.9;'>These signals survived the ICT Box anomalies (exactly 2 alerts in 10 days). <strong>Trend-Following Notice: No Fixed Profit Target. Use the Chandelier Exit.</strong></p>
+            <p style='margin-bottom: 0; opacity: 0.9;'>These signals survived the ICT Box anomalies (exactly 2 alerts in <strong>21 days</strong>). <strong>Trend-Following Notice: No Fixed Profit Target. Use the Chandelier Exit.</strong></p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -536,21 +536,37 @@ elif page == "SBIA Institutional Engine":
                 if "DATE" in df_flex.columns:
                     df_flex["DATE"] = pd.to_datetime(df_flex["DATE"], errors="coerce").dt.strftime("%d %b %Y")
                 
+                if "AI_WIN_PROBABILITY" in df_flex.columns and "AI_APPROVED" in df_flex.columns:
+                    df_flex["AI_STATUS"] = df_flex.apply(
+                        lambda r: f"✅ {r['AI_WIN_PROBABILITY']:.1f}%" if r["AI_APPROVED"] else f"❌ {r['AI_WIN_PROBABILITY']:.1f}%",
+                        axis=1
+                    )
+                
                 format_dict = {
                     "CLOSE": "₹{:.2f}",
                     "ATR14": "₹{:.2f}",
                     "CHANDELIER_EXIT": "₹{:.2f}",
                     "REC_POS_SIZE_INR": "₹{:,.0f}",
-                    "AI_WIN_PROBABILITY": "{:.1f}%",
                     "SIS": "{:.2f}",
                     "Whale_Density": "{:.2f}",
                     "Implied_Trades": "{:,.0f}"
                 }
                 
-                display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "CHANDELIER_EXIT", "REC_POS_SIZE_INR", "ATR14"]
+                display_cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_STATUS", "SIS", "Whale_Density", "Implied_Trades", "CHANDELIER_EXIT", "REC_POS_SIZE_INR", "ATR14"]
                 avail_cols = [c for c in display_cols if c in df_flex.columns]
-                
-                styled_flex = df_flex[avail_cols].style.format(format_dict).background_gradient(subset=["AI_WIN_PROBABILITY"], cmap="Blues")
+
+                def color_ai_status(val):
+                    if isinstance(val, str) and val.startswith("✅"):
+                        return "color: #2ecc71; font-weight: bold; background-color: rgba(46, 204, 113, 0.1);"
+                    if isinstance(val, str) and val.startswith("❌"):
+                        return "color: #e74c3c; font-style: italic; background-color: rgba(231, 76, 60, 0.05);"
+                    return ""
+
+                if "AI_STATUS" in avail_cols:
+                    styled_flex = df_flex[avail_cols].style.format(format_dict).map(color_ai_status, subset=["AI_STATUS"])
+                else:
+                    styled_flex = df_flex[avail_cols].style.format(format_dict)
+                    
                 st.dataframe(styled_flex, use_container_width=True, hide_index=True)
             else:
                 st.warning("⚠️ No stocks passed the strict FlexGate logic today.")
