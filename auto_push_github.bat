@@ -62,7 +62,7 @@ echo [3/5] Staging files and checking for changes...
 echo ----------------------------------------------------------------------
 
 REM Stage all trackable output files FIRST, then diff the index
-git add data/signal_history.csv data/dashboard_cloud.csv data/active_signals_ranked.csv data/signal_scores_today.csv data/signal_scores_history.csv auto_update_smart.py auto_push_github.bat progressive_screener.py dashboard_full.py config.py nse_downloader_fixed_nov2025.py rebuild_data.py bse_downloader_working.py calculate_active_signals.py
+git add data/*.csv *.py *.bat
 
 REM Check if staging produced any diff vs last commit
 git diff --cached --quiet
