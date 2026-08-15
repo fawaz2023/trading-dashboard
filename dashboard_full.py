@@ -489,10 +489,14 @@ elif page == "SBIA Institutional Engine":
                                             lambda r: f"₹{r['TAKE_PROFIT']:.2f} (+{((r['TAKE_PROFIT'] - r['ENTRY_PRICE']) / r['ENTRY_PRICE']) * 100:.1f}%)" if pd.notna(r['TAKE_PROFIT']) and pd.notna(r['ENTRY_PRICE']) and r['ENTRY_PRICE'] > 0 else (f"₹{r['TAKE_PROFIT']:.2f}" if pd.notna(r['TAKE_PROFIT']) else "N/A"),
                                             axis=1
                                         )
+                                    if "EXIT_PRICE" in completed_df.columns:
+                                        completed_df["EXIT_PRICE"] = completed_df.apply(
+                                            lambda r: f"₹{r['EXIT_PRICE']:.2f} ({((r['EXIT_PRICE'] - r['ENTRY_PRICE']) / r['ENTRY_PRICE']) * 100:+.1f}%)" if pd.notna(r['EXIT_PRICE']) and pd.notna(r['ENTRY_PRICE']) and r['ENTRY_PRICE'] > 0 else (f"₹{r['EXIT_PRICE']:.2f}" if pd.notna(r['EXIT_PRICE']) else "N/A"),
+                                            axis=1
+                                        )
 
                                 format_ledger = {
                                     "ENTRY_PRICE": "₹{:.2f}",
-                                    "EXIT_PRICE": "₹{:.2f}",
                                     "ENTRY_AI_PROB": "{:.1f}%",
                                     "ENTRY_WHALE_DENSITY": "{:.2f}"
                                 }
