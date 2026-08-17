@@ -230,49 +230,72 @@ if page == "Dashboard":
                                 
                                 sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=True)
                                 total_signals = len(df_viz)
+                                                       # Modern Horizontal Lollipop Chart (2026 Fintech Terminal Style)
+                                fig = go.Figure()
                                 
-                                # Modern Radial Bar Chart
-                                fig = go.Figure(go.Barpolar(
-                                    r=sector_df['COUNT'],
-                                    theta=sector_df['SECTOR'],
+                                # 1. The thin bars (sticks)
+                                fig.add_trace(go.Bar(
+                                    x=sector_df['COUNT'],
+                                    y=sector_df['SECTOR'],
+                                    orientation='h',
+                                    marker=dict(color='rgba(255, 255, 255, 0.1)'),
+                                    width=0.1,
+                                    hoverinfo='none'
+                                ))
+
+                                # 2. The glowing halo (neon effect)
+                                fig.add_trace(go.Scatter(
+                                    x=sector_df['COUNT'],
+                                    y=sector_df['SECTOR'],
+                                    mode='markers',
                                     marker=dict(
+                                        size=26,
                                         color=sector_df['COUNT'],
                                         colorscale=[[0, '#00E5FF'], [0.5, '#FFB300'], [1, '#F50057']],
-                                        line=dict(color='rgba(0,0,0,0)', width=0)
+                                        opacity=0.3,
                                     ),
-                                    opacity=0.9,
-                                    text=sector_df['COUNT'],
-                                    hovertemplate='<b>%{theta}</b><br>Signals: %{r}<extra></extra>'
+                                    hoverinfo='none'
                                 ))
-                                
+
+                                # 3. The solid lollipops with text
+                                fig.add_trace(go.Scatter(
+                                    x=sector_df['COUNT'],
+                                    y=sector_df['SECTOR'],
+                                    mode='markers+text',
+                                    text=sector_df['COUNT'],
+                                    textposition='middle right',
+                                    textfont=dict(color='white', size=13, family='Inter'),
+                                    marker=dict(
+                                        size=14,
+                                        color=sector_df['COUNT'],
+                                        colorscale=[[0, '#00E5FF'], [0.5, '#FFB300'], [1, '#F50057']],
+                                        line=dict(color='white', width=1.5)
+                                    ),
+                                    hovertemplate='<b>%{y}</b><br>Signals: %{x}<extra></extra>'
+                                ))
+
                                 # Minimalist zero-chrome layout
                                 fig.update_layout(
-                                    margin=dict(t=20, l=20, r=20, b=20),
+                                    margin=dict(t=30, l=20, r=40, b=20),
                                     paper_bgcolor='rgba(0,0,0,0)',
                                     plot_bgcolor='rgba(0,0,0,0)',
                                     font=dict(color='#8b9bb4', family='Inter, sans-serif'),
-                                    polar=dict(
-                                        hole=0.55, # Slightly larger hole for the text
-                                        radialaxis=dict(showticklabels=False, gridcolor='rgba(255,255,255,0.03)', linecolor='rgba(255,255,255,0)'),
-                                        angularaxis=dict(gridcolor='rgba(255,255,255,0.05)', linecolor='rgba(255,255,255,0)', rotation=90)
-                                    ),
-                                    showlegend=False
+                                    xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+                                    yaxis=dict(showgrid=False, linecolor='rgba(255,255,255,0.05)'),
+                                    showlegend=False,
+                                    height=380
                                 )
-                                
-                                # Add total signals to the center of the donut
+
+                                # Add total signals as a sleek subtitle annotation instead of a center donut
                                 fig.add_annotation(
-                                    text="TOTAL SIGNALS",
-                                    x=0.5, y=0.56,
+                                    text=f"TOTAL SIGNALS: <b style='color:#ffffff; font-size: 16px;'>{total_signals}</b>",
+                                    x=0.01, y=1.15,
+                                    xref="paper", yref="paper",
                                     showarrow=False,
-                                    font=dict(family='Inter, sans-serif', size=13, color='#8b9bb4')
+                                    xanchor="left",
+                                    font=dict(family='Inter, sans-serif', size=12, color='#8b9bb4')
                                 )
-                                fig.add_annotation(
-                                    text=f"{total_signals}",
-                                    x=0.5, y=0.45,
-                                    showarrow=False,
-                                    font=dict(family='Inter, sans-serif', size=46, color='#ffffff')
-                                )
-                                
+
                                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
                             with col_right:
