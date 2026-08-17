@@ -512,6 +512,124 @@ elif page == "SBIA Institutional Engine":
                                 st.info("No completed trades recorded yet.")
                         except Exception as e:
                             st.error(f"Error loading ledger: {e}")
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- SBIA VELOCITY ₹10L SIMULATION ---
+                if os.path.exists("data/sbia_ledger.csv"):
+                    try:
+                        ledger_full = pd.read_csv("data/sbia_ledger.csv")
+                        if len(ledger_full) > 0:
+                            st.markdown("""
+                            <div style='background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(39, 174, 96, 0.05)); border: 1px solid rgba(46, 204, 113, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+                                <h3 style='margin-top: 0; color: #2ecc71; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>💰</span> ₹10L Velocity Simulation</h3>
+                                <p style='margin-bottom: 0; opacity: 0.9;'>Tracking total Realized and Unrealized PnL assuming a ₹1,000,000 base capital, risking exactly 1.5% (₹15,000) per trade based on the exact Stop Loss distance on entry day.</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            capital = 1000000.0
+                            risk_per_trade = capital * 0.015 # 15000
+                            
+                            sim_records = []
+                            total_realized = 0.0
+                            total_unrealized = 0.0
+                            wins = 0
+                            losses = 0
+                            
+                            for idx, row in ledger_full.iterrows():
+                                sym = row['SYMBOL']
+                                entry = row['ENTRY_PRICE']
+                                sl = row['STOP_LOSS']
+                                status = row['STATUS']
+                                
+                                if pd.isna(entry) or pd.isna(sl) or entry <= sl:
+                                    # Fallback if SL is invalid
+                                    invested = capital * 0.10
+                                    shares = invested / entry if entry > 0 else 0
+                                else:
+                                    sl_dist = entry - sl
+                                    shares = risk_per_trade / sl_dist
+                                    invested = shares * entry
+                                    
+                                    # Cap max investment at 10% of equity like the main engine
+                                    if invested > capital * 0.10:
+                                        invested = capital * 0.10
+                                        shares = invested / entry
+                                
+                                # Realized PnL
+                                r_pnl = 0.0
+                                u_pnl = 0.0
+                                current_value = invested
+                                
+                                if status != 'ACTIVE':
+                                    exit_px = row.get('EXIT_PRICE', entry)
+                                    if pd.isna(exit_px): exit_px = entry
+                                    r_pnl = shares * (exit_px - entry)
+                                    total_realized += r_pnl
+                                    current_value = invested + r_pnl
+                                    
+                                    if status in ['HIT_TP', 'MOMENTUM_LOST'] and r_pnl > 0: wins += 1
+                                    elif status == 'HIT_SL' or r_pnl < 0: losses += 1
+                                    
+                                else:
+                                    # Active trade, get current price from df_alpha
+                                    current_px = entry
+                                    if sym in df_alpha['SYMBOL'].values:
+                                        current_px = df_alpha[df_alpha['SYMBOL'] == sym]['CLOSE'].iloc[0]
+                                    u_pnl = shares * (current_px - entry)
+                                    total_unrealized += u_pnl
+                                    current_value = invested + u_pnl
+                                    
+                                sim_records.append({
+                                    "DATE": row["ENTRY_DATE"],
+                                    "SYMBOL": sym,
+                                    "STATUS": status,
+                                    "INVESTED": invested,
+                                    "CURR_VALUE": current_value,
+                                    "REALIZED_PNL": r_pnl if status != 'ACTIVE' else np.nan,
+                                    "UNREALIZED_PNL": u_pnl if status == 'ACTIVE' else np.nan,
+                                    "TOTAL_PNL": r_pnl + u_pnl,
+                                    "PNL_%": ((r_pnl + u_pnl) / invested * 100) if invested > 0 else 0
+                                })
+                                
+                            sim_df = pd.DataFrame(sim_records)
+                            sim_df = sim_df.sort_values(by="DATE", ascending=False)
+                            
+                            total_trades = wins + losses
+                            win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
+                            current_equity = capital + total_realized + total_unrealized
+                            
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Current Portfolio Value", f"₹{current_equity:,.0f}", f"{((current_equity - capital) / capital) * 100:+.2f}%")
+                            c2.metric("Total Realized PnL", f"₹{total_realized:,.0f}")
+                            c3.metric("Running Unrealized PnL", f"₹{total_unrealized:,.0f}")
+                            c4.metric("Strategy Win Rate", f"{win_rate:.1f}%", f"{wins}W / {losses}L")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            with st.expander("📊 View Trade-by-Trade Simulation Ledger"):
+                                sim_df["DATE"] = pd.to_datetime(sim_df["DATE"], errors="coerce").dt.strftime("%d %b %Y")
+                                
+                                format_sim = {
+                                    "INVESTED": "₹{:,.0f}",
+                                    "CURR_VALUE": "₹{:,.0f}",
+                                    "REALIZED_PNL": "₹{:,.0f}",
+                                    "UNREALIZED_PNL": "₹{:,.0f}",
+                                    "TOTAL_PNL": "₹{:,.0f}",
+                                    "PNL_%": "{:+.1f}%"
+                                }
+                                
+                                def color_pnl(val):
+                                    if pd.isna(val): return ""
+                                    if val > 0: return "color: #2ecc71; font-weight: bold;"
+                                    if val < 0: return "color: #e74c3c; font-weight: bold;"
+                                    return "color: #95a5a6;"
+                                    
+                                styled_sim = sim_df.style.format(format_sim).map(color_pnl, subset=["REALIZED_PNL", "UNREALIZED_PNL", "TOTAL_PNL", "PNL_%"]).map(color_status, subset=["STATUS"])
+                                st.dataframe(styled_sim, use_container_width=True, hide_index=True)
+                                
+                    except Exception as e:
+                        st.error(f"Error loading simulation: {e}")
             else:
                 st.warning("⚠️ No stocks passed the Path A ML Gate today.")
         else:
