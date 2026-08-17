@@ -162,7 +162,12 @@ st.sidebar.divider()
 if st.sidebar.button("Force Data Refresh", help="Clear cache and reload latest data from disk", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
-exclude_t2t = st.sidebar.checkbox("🚫 Hide 100% Delivery (T2T)", value=True)
+exclude_t2t = st.sidebar.checkbox("Hide 100% Delivery (T2T)", value=True)
+
+st.sidebar.divider()
+st.sidebar.markdown("### 📊 Seasonal Position Sizing")
+user_capital = st.sidebar.number_input("Total Capital (INR)", min_value=100000, value=1000000, step=100000)
+user_risk_pct = st.sidebar.number_input("Risk per Trade (%)", min_value=0.1, max_value=5.0, value=1.5, step=0.1)
 
 
 # DASHBOARD
@@ -233,13 +238,16 @@ if page == "Dashboard":
                                                        # Modern Horizontal Lollipop Chart (2026 Fintech Terminal Style)
                                 fig = go.Figure()
                                 
-                                # 1. The thin bars (sticks)
+                                # 1. The thick bars (stems matching dot color)
                                 fig.add_trace(go.Bar(
                                     x=sector_df['COUNT'],
                                     y=sector_df['SECTOR'],
                                     orientation='h',
-                                    marker=dict(color='rgba(255, 255, 255, 0.1)'),
-                                    width=0.1,
+                                    marker=dict(
+                                        color=sector_df['COUNT'],
+                                        colorscale=[[0, '#00E5FF'], [0.5, '#FFB300'], [1, '#F50057']]
+                                    ),
+                                    width=0.15,
                                     hoverinfo='none'
                                 ))
 
@@ -262,26 +270,30 @@ if page == "Dashboard":
                                     x=sector_df['COUNT'],
                                     y=sector_df['SECTOR'],
                                     mode='markers+text',
-                                    text=sector_df['COUNT'],
+                                    text=["<b>" + str(val) + "</b>" for val in sector_df['COUNT']],
                                     textposition='middle right',
-                                    textfont=dict(color='white', size=13, family='Inter'),
+                                    textfont=dict(color='#FFFFFF', size=14, family='Inter, sans-serif'),
                                     marker=dict(
                                         size=14,
                                         color=sector_df['COUNT'],
                                         colorscale=[[0, '#00E5FF'], [0.5, '#FFB300'], [1, '#F50057']],
-                                        line=dict(color='white', width=1.5)
+                                        line=dict(color='white', width=1)
                                     ),
                                     hovertemplate='<b>%{y}</b><br>Signals: %{x}<extra></extra>'
                                 ))
 
-                                # Minimalist zero-chrome layout
+                                # Minimalist zero-chrome layout with wide left margin for pure white labels
                                 fig.update_layout(
-                                    margin=dict(t=30, l=20, r=40, b=20),
+                                    margin=dict(t=30, l=140, r=40, b=20),
                                     paper_bgcolor='rgba(0,0,0,0)',
                                     plot_bgcolor='rgba(0,0,0,0)',
                                     font=dict(color='#8b9bb4', family='Inter, sans-serif'),
                                     xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
-                                    yaxis=dict(showgrid=False, linecolor='rgba(255,255,255,0.05)'),
+                                    yaxis=dict(
+                                        showgrid=False, 
+                                        linecolor='rgba(255,255,255,0.05)',
+                                        tickfont=dict(color='#FFFFFF', size=14, family='Inter, sans-serif')
+                                    ),
                                     showlegend=False,
                                     height=380
                                 )
@@ -849,7 +861,7 @@ elif page == "SBIA Institutional Engine":
         st.markdown("""
         <div style='background: linear-gradient(135deg, rgba(142, 162, 255, 0.1), rgba(11, 124, 255, 0.05)); border: 1px solid rgba(142, 162, 255, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
             <h3 style='margin-top: 0; color: #8ea2ff; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>🔭</span> Path B: Base-Loading (FlexGate)</h3>
-            <p style='margin-bottom: 0; opacity: 0.9;'>These signals survived the ICT Box anomalies (exactly 2 alerts in <strong>21 days</strong>). <strong>Trend-Following Notice: No Fixed Profit Target. Use the Chandelier Exit.</strong></p>
+            <p style='margin-bottom: 0; opacity: 0.9;'>These signals survived the ML Anomaly Filter (Random Forest Unified Alpha Profile). <strong>Trend-Following Notice: No Fixed Profit Target. Use the Chandelier Exit.</strong></p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -870,6 +882,12 @@ elif page == "SBIA Institutional Engine":
                         axis=1
                     )
                 
+                if "ATR14" in df_flex.columns and "CLOSE" in df_flex.columns:
+                    sl_dist = 3.0 * df_flex["ATR14"]
+                    shares_to_buy = (user_capital * (user_risk_pct / 100.0)) / sl_dist
+                    df_flex["REC_POS_SIZE_INR"] = shares_to_buy * df_flex["CLOSE"]
+                    df_flex["REC_POS_SIZE_INR"] = df_flex["REC_POS_SIZE_INR"].fillna(0)
+
                 format_dict = {
                     "CLOSE": "₹{:.2f}",
                     "ATR14": "₹{:.2f}",
