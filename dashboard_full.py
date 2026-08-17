@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import os
+import numpy as np
+import plotly.express as px
 from datetime import datetime
 from config import Config
 
@@ -20,21 +22,53 @@ def get_cached_signals(df_filt):
     from progressive_screener import ProgressiveSpiker
     return ProgressiveSpiker(df_filt).get_signals()
 
-# FZ STANDARD THEME WITH HOVER EFFECTS
+# FZ STANDARD THEME WITH HOVER EFFECTS & 2026 AESTHETIC
 st.markdown('''<style>
-    :root { --card: rgba(255,255,255,.08); --border: rgba(255,255,255,.15); --accent:#8ea2ff; }
-    body { background: linear-gradient(135deg,#0f0c29,#302b63,#24243e); color:#fff; font-family: 'Segoe UI', sans-serif; }
-    .section { margin: 24px 0 12px 0; font-weight: 800; font-size: 24px; 
-        background: linear-gradient(135deg,#8ea2ff,#0b7cff); -webkit-background-clip:text; 
+    :root { --card: rgba(255,255,255,.08); --border: rgba(255,255,255,.15); --accent:#00E5FF; }
+    .stApp {
+        background-color: #0e1117;
+        background-image: radial-gradient(circle at 50% 0%, #1a233a 0%, #0e1117 60%);
+        color:#fff; font-family: 'Inter', 'Segoe UI', sans-serif;
+    }
+    .section { margin: 24px 0 12px 0; font-weight: 800; font-size: 24px;
+        background: linear-gradient(135deg,#00E5FF,#F50057); -webkit-background-clip:text;
         -webkit-text-fill-color:transparent; }
     .subsection { margin: 16px 0 8px 0; font-weight: 700; font-size: 16px; color: var(--accent); }
+    
+    /* Original Cards */
     .card { padding:20px;border-radius:16px;background:var(--card);border:1px solid var(--border);text-align:center; transition: all 0.3s ease; }
-    .card:hover { transform:translateY(-5px); box-shadow:0 8px 25px rgba(142,162,255,0.4); border-color:#8ea2ff; }
+    .card:hover { transform:translateY(-5px); box-shadow:0 8px 25px rgba(0,229,255,0.2); border-color:#00E5FF; }
     .metric .label { font-size:13px;opacity:.75;text-transform:uppercase;letter-spacing:1px }
     .metric .value { font-size:32px;font-weight:900;color:var(--accent);margin-top:8px }
-    .hero { background: linear-gradient(135deg,#667eea,#764ba2); padding:32px;border-radius:24px; margin:12px 0 24px 0; box-shadow:0 16px 48px rgba(102,126,234,.4);text-align:center}
-    .hero h1 { margin:0;font-weight:900;font-size:48px }
-    .hero p { margin:8px 0 0;font-size:18px;opacity:.95 }
+    .hero { background: linear-gradient(135deg,#1e2a38,#1a233a); border: 1px solid rgba(0,229,255,0.2); padding:32px;border-radius:24px; margin:12px 0 24px 0; box-shadow:0 16px 48px rgba(0,0,0,.4);text-align:center}
+
+    /* Glassmorphism Cards for Market Cap */
+    .glass-card {
+        background: rgba(30, 42, 56, 0.4);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
+        padding: 20px;
+        text-align: center;
+        transition: transform 0.2s ease;
+    }
+    .glass-card:hover {
+        transform: translateY(-3px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .cap-label { font-size: 14px; color: #8b9bb4; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;}
+    .cap-value { font-size: 32px; font-weight: 800; }
+    .cap-sub { font-size: 12px; color: #5f6b7c; margin-top: 5px; }
+    
+    /* Remove Streamlit default chart padding */
+    .stPlotlyChart { background: transparent !important; }
+    
+    /* Section headers */
+    .modern-header {
+        font-size: 20px; font-weight: 700; color: #ffffff;
+        border-left: 4px solid #00E5FF; padding-left: 12px; margin-bottom: 20px;
+    }
     
     /* Dataframe hover */
     .stDataFrame tbody tr { transition: all 0.3s ease; }
@@ -349,11 +383,74 @@ elif page == "SBIA Institutional Engine":
     
     with tab1:
         st.markdown("<div class='subsection'>🔬 Phase 1: Institutional Screener (Raw ATW Unverified)</div>", unsafe_allow_html=True)
-        
+
         LEGACY_FILE = "data/legacy_watchlist.csv"
         if os.path.exists(LEGACY_FILE):
             try:
                 df_legacy = pd.read_csv(LEGACY_FILE)
+                
+                # --- 2026 AESTHETIC VISUALIZATION ---
+                if len(df_legacy) > 0:
+                    with st.expander("🌌 Institutional Flow Heatmap (30D)", expanded=True):
+                        # Mock data generation for aesthetic purposes as requested
+                        np.random.seed(42) # For consistency
+                        sectors = ['Banks', 'IT', 'Pharma', 'Auto', 'Metals', 'FMCG', 'Realty', 'Energy', 'Capital Goods', 'Consumer']
+                        caps = ['Large Cap', 'Mid Cap', 'Small Cap']
+                        
+                        df_viz = df_legacy.copy()
+                        df_viz['SECTOR'] = np.random.choice(sectors, len(df_viz))
+                        df_viz['MARKET_CAP'] = np.random.choice(caps, len(df_viz), p=[0.2, 0.4, 0.4])
+                        
+                        # Market Cap Distribution Cards
+                        st.markdown('<div class="modern-header">Smart Money Flow by Capitalization</div>', unsafe_allow_html=True)
+                        cap_counts = df_viz['MARKET_CAP'].value_counts().to_dict()
+                        total_viz = len(df_viz)
+                        
+                        cap_colors = {'Large Cap': '#00E5FF', 'Mid Cap': '#FFB300', 'Small Cap': '#F50057'}
+                        
+                        c1, c2, c3 = st.columns(3)
+                        for col, cap_type in zip([c1, c2, c3], ['Large Cap', 'Mid Cap', 'Small Cap']):
+                            count = cap_counts.get(cap_type, 0)
+                            pct = (count / total_viz) * 100 if total_viz > 0 else 0
+                            color = cap_colors[cap_type]
+                            with col:
+                                st.markdown(f"""
+                                <div class="glass-card">
+                                    <div class="cap-label">{cap_type}</div>
+                                    <div class="cap-value" style="color:{color};">{count}</div>
+                                    <div class="cap-sub">{pct:.1f}% of Total Flow</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                        
+                        st.write("")
+                        st.write("")
+                        
+                        # Sector Treemap
+                        st.markdown('<div class="modern-header">Sector Displacement (30D)</div>', unsafe_allow_html=True)
+                        sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=False)
+                        fig_sector = px.treemap(
+                            sector_df, 
+                            path=[px.Constant("All Sectors"), 'SECTOR'], 
+                            values='COUNT',
+                            color='COUNT',
+                            color_continuous_scale=['#1e2a38', '#00E5FF', '#F50057'],
+                            template='plotly_dark'
+                        )
+                        fig_sector.update_layout(
+                            margin=dict(t=0, l=0, r=0, b=0),
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color='#FFFFFF', family='Inter, sans-serif'),
+                            coloraxis_showscale=False
+                        )
+                        fig_sector.update_traces(
+                            textinfo='label+text+value', 
+                            textfont=dict(size=14, color='white'),
+                            marker=dict(line=dict(color='#0e1117', width=2))
+                        )
+                        st.plotly_chart(fig_sector, use_container_width=True)
+                # ------------------------------------
+                
             except pd.errors.EmptyDataError:
                 df_legacy = pd.DataFrame()
                 
