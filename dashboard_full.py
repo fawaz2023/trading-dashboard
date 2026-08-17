@@ -162,12 +162,7 @@ st.sidebar.divider()
 if st.sidebar.button("Force Data Refresh", help="Clear cache and reload latest data from disk", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
-exclude_t2t = st.sidebar.checkbox("Hide 100% Delivery (T2T)", value=True)
-
-st.sidebar.divider()
-st.sidebar.markdown("### 📊 Seasonal Position Sizing")
-user_capital = st.sidebar.number_input("Total Capital (INR)", min_value=100000, value=1000000, step=100000)
-user_risk_pct = st.sidebar.number_input("Risk per Trade (%)", min_value=0.1, max_value=5.0, value=1.5, step=0.1)
+exclude_t2t = st.sidebar.checkbox("🚫 Hide 100% Delivery (T2T)", value=True)
 
 
 # DASHBOARD
@@ -235,70 +230,75 @@ if page == "Dashboard":
                                 
                                 sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=True)
                                 total_signals = len(df_viz)
-                                                       # Modern Horizontal Lollipop Chart (2026 Fintech Terminal Style)
+                                                       # --- COLOR LOGIC ---
+                                def get_color(count):
+                                    if count >= 6: return '#F50057'  # Magenta for highest
+                                    elif count >= 4: return '#FFB300' # Amber for mid
+                                    else: return '#00E5FF'           # Cyan for lowest
+
+                                colors = [get_color(c) for c in sector_df['COUNT']]
+
+                                # --- BUILD THE CHART ---
                                 fig = go.Figure()
-                                
-                                # 1. The thick bars (stems matching dot color)
+
+                                # 1. THE STEMS (Thick, visible lines)
                                 fig.add_trace(go.Bar(
                                     x=sector_df['COUNT'],
                                     y=sector_df['SECTOR'],
                                     orientation='h',
                                     marker=dict(
-                                        color=sector_df['COUNT'],
-                                        colorscale=[[0, '#00E5FF'], [0.5, '#FFB300'], [1, '#F50057']]
+                                        color=colors, 
+                                        line=dict(width=0) # No border on the bar itself
                                     ),
-                                    width=0.15,
-                                    hoverinfo='none'
+                                    width=0.05, # This makes the thick bar act like a thick stem
+                                    hoverinfo='skip'
                                 ))
 
-                                # 2. The glowing halo (neon effect)
-                                fig.add_trace(go.Scatter(
-                                    x=sector_df['COUNT'],
-                                    y=sector_df['SECTOR'],
-                                    mode='markers',
-                                    marker=dict(
-                                        size=26,
-                                        color=sector_df['COUNT'],
-                                        colorscale=[[0, '#00E5FF'], [0.5, '#FFB300'], [1, '#F50057']],
-                                        opacity=0.3,
-                                    ),
-                                    hoverinfo='none'
-                                ))
-
-                                # 3. The solid lollipops with text
+                                # 2. THE DOTS AND LABELS (Heavy, bold, glowing)
                                 fig.add_trace(go.Scatter(
                                     x=sector_df['COUNT'],
                                     y=sector_df['SECTOR'],
                                     mode='markers+text',
-                                    text=["<b>" + str(val) + "</b>" for val in sector_df['COUNT']],
-                                    textposition='middle right',
-                                    textfont=dict(color='#FFFFFF', size=14, family='Inter, sans-serif'),
                                     marker=dict(
-                                        size=14,
-                                        color=sector_df['COUNT'],
-                                        colorscale=[[0, '#00E5FF'], [0.5, '#FFB300'], [1, '#F50057']],
-                                        line=dict(color='white', width=1)
+                                        size=18, # Much larger dots
+                                        color=colors,
+                                        line=dict(color='#FFFFFF', width=2), # White border for pop
+                                        symbol='circle'
+                                    ),
+                                    text=sector_df['COUNT'],
+                                    textposition='middle right',
+                                    textfont=dict(
+                                        color='#FFFFFF', # Pure white text
+                                        size=16,         # Larger text
+                                        family='Inter, sans-serif'
                                     ),
                                     hovertemplate='<b>%{y}</b><br>Signals: %{x}<extra></extra>'
                                 ))
 
-                                # Minimalist zero-chrome layout with wide left margin for pure white labels
+                                # 3. LAYOUT & ZERO-CHROME
                                 fig.update_layout(
-                                    margin=dict(t=30, l=140, r=40, b=20),
+                                    margin=dict(t=40, l=120, r=40, b=20),
                                     paper_bgcolor='rgba(0,0,0,0)',
                                     plot_bgcolor='rgba(0,0,0,0)',
-                                    font=dict(color='#8b9bb4', family='Inter, sans-serif'),
-                                    xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
-                                    yaxis=dict(
-                                        showgrid=False, 
-                                        linecolor='rgba(255,255,255,0.05)',
-                                        tickfont=dict(color='#FFFFFF', size=14, family='Inter, sans-serif')
-                                    ),
                                     showlegend=False,
+                                    xaxis=dict(
+                                        visible=False, # Hide X-axis numbers, the dots have the numbers
+                                        showgrid=False,
+                                        zeroline=False
+                                    ),
+                                    yaxis=dict(
+                                        showgrid=False,
+                                        zeroline=False,
+                                        tickfont=dict(
+                                            color='#FFFFFF', # Pure white sector names
+                                            size=14,
+                                            family='Inter, sans-serif'
+                                        )
+                                    ),
                                     height=380
                                 )
 
-                                # Add total signals as a sleek subtitle annotation instead of a center donut
+                                # Add total signals as a sleek subtitle annotation since donut is gone
                                 fig.add_annotation(
                                     text=f"TOTAL SIGNALS: <b style='color:#ffffff; font-size: 16px;'>{total_signals}</b>",
                                     x=0.01, y=1.15,
@@ -861,7 +861,7 @@ elif page == "SBIA Institutional Engine":
         st.markdown("""
         <div style='background: linear-gradient(135deg, rgba(142, 162, 255, 0.1), rgba(11, 124, 255, 0.05)); border: 1px solid rgba(142, 162, 255, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
             <h3 style='margin-top: 0; color: #8ea2ff; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>🔭</span> Path B: Base-Loading (FlexGate)</h3>
-            <p style='margin-bottom: 0; opacity: 0.9;'>These signals survived the ML Anomaly Filter (Random Forest Unified Alpha Profile). <strong>Trend-Following Notice: No Fixed Profit Target. Use the Chandelier Exit.</strong></p>
+            <p style='margin-bottom: 0; opacity: 0.9;'>These signals survived the ICT Box anomalies (exactly 2 alerts in <strong>21 days</strong>). <strong>Trend-Following Notice: No Fixed Profit Target. Use the Chandelier Exit.</strong></p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -882,12 +882,6 @@ elif page == "SBIA Institutional Engine":
                         axis=1
                     )
                 
-                if "ATR14" in df_flex.columns and "CLOSE" in df_flex.columns:
-                    sl_dist = 3.0 * df_flex["ATR14"]
-                    shares_to_buy = (user_capital * (user_risk_pct / 100.0)) / sl_dist
-                    df_flex["REC_POS_SIZE_INR"] = shares_to_buy * df_flex["CLOSE"]
-                    df_flex["REC_POS_SIZE_INR"] = df_flex["REC_POS_SIZE_INR"].fillna(0)
-
                 format_dict = {
                     "CLOSE": "₹{:.2f}",
                     "ATR14": "₹{:.2f}",
