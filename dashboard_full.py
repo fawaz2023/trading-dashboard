@@ -229,7 +229,9 @@ if page == "Dashboard":
                                 st.markdown('<div class="terminal-header">Sector Displacement Radar</div>', unsafe_allow_html=True)
                                 
                                 sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=True)
+                                total_signals = len(df_viz)
                                 
+                                # Modern Radial Bar Chart
                                 fig = go.Figure(go.Barpolar(
                                     r=sector_df['COUNT'],
                                     theta=sector_df['SECTOR'],
@@ -243,18 +245,28 @@ if page == "Dashboard":
                                     hovertemplate='<b>%{theta}</b><br>Signals: %{r}<extra></extra>'
                                 ))
                                 
+                                # Minimalist zero-chrome layout
                                 fig.update_layout(
                                     margin=dict(t=20, l=20, r=20, b=20),
                                     paper_bgcolor='rgba(0,0,0,0)',
                                     plot_bgcolor='rgba(0,0,0,0)',
                                     font=dict(color='#8b9bb4', family='Inter, sans-serif'),
                                     polar=dict(
-                                        hole=0.4,
+                                        hole=0.55, # Slightly larger hole for the text
                                         radialaxis=dict(showticklabels=False, gridcolor='rgba(255,255,255,0.03)', linecolor='rgba(255,255,255,0)'),
                                         angularaxis=dict(gridcolor='rgba(255,255,255,0.05)', linecolor='rgba(255,255,255,0)', rotation=90)
                                     ),
                                     showlegend=False
                                 )
+                                
+                                # Add total signals to the center of the donut
+                                fig.add_annotation(
+                                    text=f"<span style='font-size:14px;color:#8b9bb4;letter-spacing:1px;'>TOTAL SIGNALS</span><br><span style='font-size:42px;font-weight:800;color:#ffffff;'>{total_signals}</span>",
+                                    x=0.5, y=0.5,
+                                    showarrow=False,
+                                    font=dict(family='Inter, sans-serif')
+                                )
+                                
                                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
                             with col_right:
@@ -264,19 +276,25 @@ if page == "Dashboard":
                                 total_viz = len(df_viz)
                                 cap_colors = {'Large Cap': '#00E5FF', 'Mid Cap': '#FFB300', 'Small Cap': '#F50057'}
                                 
+                                # Render Premium Cards with Trend Indicators
                                 for cap_type in ['Large Cap', 'Mid Cap', 'Small Cap']:
                                     count = cap_counts.get(cap_type, 0)
                                     pct = (count / total_viz) * 100 if total_viz > 0 else 0
                                     color = cap_colors[cap_type]
                                     
-                                    style1 = "margin-bottom: 15px;"
-                                    style2 = "display: flex; justify-content: space-between; align-items: center;"
-                                    style3 = f"color:{color};"
-                                    style4 = "text-align: right;"
-                                    style5 = "font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px;"
-                                    style6 = "font-size: 20px; font-weight: 600; color: #fff; margin-top: 5px;"
-                                    style7 = f"width: {pct}%; background-color: {color}; color: {color};"
+                                    # Mock 24h trend (replace with actual logic comparing today vs yesterday)
+                                    trend_val = np.random.uniform(-5, 10) 
+                                    trend_arrow = "▲" if trend_val >= 0 else "▼"
+                                    trend_color = "#00E5FF" if trend_val >= 0 else "#F50057"
                                     
+                                    style1 = "margin-bottom: 15px;"
+                                    style2 = "display: flex; justify-content: space-between; align-items: flex-end;"
+                                    style3 = f"color:{color};"
+                                    style4 = "text-align: right; padding-bottom: 5px;"
+                                    style5 = "font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px;"
+                                    style6 = f"font-size: 16px; font-weight: 600; color: {trend_color}; margin-top: 2px;"
+                                    style7 = f"width: {pct}%; background-color: {color}; color: {color};"
+
                                     html_str = f"""
                                     <div class="fintech-card" style="{style1}">
                                         <div style="{style2}">
@@ -285,8 +303,8 @@ if page == "Dashboard":
                                                 <div class="cap-value" style="{style3}">{count}</div>
                                             </div>
                                             <div style="{style4}">
-                                                <div style="{style5}">Flow %</div>
-                                                <div style="{style6}">{pct:.1f}%</div>
+                                                <div style="{style5}">24h Trend</div>
+                                                <div style="{style6}">{trend_arrow} {abs(trend_val):.1f}%</div>
                                             </div>
                                         </div>
                                         <div class="progress-bg">
