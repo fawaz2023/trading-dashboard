@@ -240,8 +240,6 @@ if page == "Dashboard":
                                     ),
                                     opacity=0.9,
                                     text=sector_df['COUNT'],
-                                    texttemplate='%{text}',
-                                    textfont=dict(color='white', size=12, family='Inter'),
                                     hovertemplate='<b>%{theta}</b><br>Signals: %{r}<extra></extra>'
                                 ))
                                 
