@@ -172,6 +172,75 @@ if page == "Dashboard":
                 cols = [c for c in ["SYMBOL","EXCHANGE","CLOSE","DELIV_PER","DELIVERY_TURNOVER","ATW"] if c in sig.columns]
                 st.dataframe(sig[cols].head(30), use_container_width=True, height=500)
                 
+                # --- 2026 AESTHETIC VISUALIZATION MOVED TO MAIN DASHBOARD ---
+                st.markdown("<br>", unsafe_allow_html=True)
+                LEGACY_FILE_MAIN = "data/legacy_watchlist.csv"
+                if os.path.exists(LEGACY_FILE_MAIN):
+                    try:
+                        df_legacy_main = pd.read_csv(LEGACY_FILE_MAIN)
+                        if len(df_legacy_main) > 0:
+                            with st.expander("🌌 Institutional Flow Heatmap (30D)", expanded=True):
+                                # Mock data generation for aesthetic purposes as requested
+                                np.random.seed(42) # For consistency
+                                sectors = ['Banks', 'IT', 'Pharma', 'Auto', 'Metals', 'FMCG', 'Realty', 'Energy', 'Capital Goods', 'Consumer']
+                                caps = ['Large Cap', 'Mid Cap', 'Small Cap']
+
+                                df_viz = df_legacy_main.copy()
+                                df_viz['SECTOR'] = np.random.choice(sectors, len(df_viz))
+                                df_viz['MARKET_CAP'] = np.random.choice(caps, len(df_viz), p=[0.2, 0.4, 0.4])
+
+                                # Market Cap Distribution Cards
+                                st.markdown('<div class="modern-header">Smart Money Flow by Capitalization</div>', unsafe_allow_html=True)
+                                cap_counts = df_viz['MARKET_CAP'].value_counts().to_dict()
+                                total_viz = len(df_viz)
+
+                                cap_colors = {'Large Cap': '#00E5FF', 'Mid Cap': '#FFB300', 'Small Cap': '#F50057'}
+
+                                c1_cap, c2_cap, c3_cap = st.columns(3)
+                                for col, cap_type in zip([c1_cap, c2_cap, c3_cap], ['Large Cap', 'Mid Cap', 'Small Cap']):
+                                    count = cap_counts.get(cap_type, 0)
+                                    pct = (count / total_viz) * 100 if total_viz > 0 else 0
+                                    color = cap_colors[cap_type]
+                                    with col:
+                                        st.markdown(f"""
+                                        <div class="glass-card">
+                                            <div class="cap-label">{cap_type}</div>
+                                            <div class="cap-value" style="color:{color};">{count}</div>
+                                            <div class="cap-sub">{pct:.1f}% of Total Flow</div>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+
+                                st.write("")
+                                st.write("")
+
+                                # Sector Treemap
+                                st.markdown('<div class="modern-header">Sector Displacement (30D)</div>', unsafe_allow_html=True)
+                                sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=False)
+                                fig_sector = px.treemap(
+                                    sector_df,
+                                    path=[px.Constant("All Sectors"), 'SECTOR'],
+                                    values='COUNT',
+                                    color='COUNT',
+                                    color_continuous_scale=['#1e2a38', '#00E5FF', '#F50057'],
+                                    template='plotly_dark'
+                                )
+                                fig_sector.update_layout(
+                                    margin=dict(t=0, l=0, r=0, b=0),
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    font=dict(color='#FFFFFF', family='Inter, sans-serif'),
+                                    coloraxis_showscale=False
+                                )
+                                fig_sector.update_traces(
+                                    textinfo='label+text+value',
+                                    textfont=dict(size=14, color='white'),
+                                    marker=dict(line=dict(color='#0e1117', width=2))
+                                )
+                                st.plotly_chart(fig_sector, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Could not load heatmap: {e}")
+                # -----------------------------------------------------------------
+                
                 st.markdown("<div class='subsection'>Add Signal to Watchlist</div>", unsafe_allow_html=True)
                 col1, col2 = st.columns([2, 1])
                 with col1:
@@ -388,67 +457,6 @@ elif page == "SBIA Institutional Engine":
         if os.path.exists(LEGACY_FILE):
             try:
                 df_legacy = pd.read_csv(LEGACY_FILE)
-                
-                # --- 2026 AESTHETIC VISUALIZATION ---
-                if len(df_legacy) > 0:
-                    with st.expander("🌌 Institutional Flow Heatmap (30D)", expanded=True):
-                        # Mock data generation for aesthetic purposes as requested
-                        np.random.seed(42) # For consistency
-                        sectors = ['Banks', 'IT', 'Pharma', 'Auto', 'Metals', 'FMCG', 'Realty', 'Energy', 'Capital Goods', 'Consumer']
-                        caps = ['Large Cap', 'Mid Cap', 'Small Cap']
-                        
-                        df_viz = df_legacy.copy()
-                        df_viz['SECTOR'] = np.random.choice(sectors, len(df_viz))
-                        df_viz['MARKET_CAP'] = np.random.choice(caps, len(df_viz), p=[0.2, 0.4, 0.4])
-                        
-                        # Market Cap Distribution Cards
-                        st.markdown('<div class="modern-header">Smart Money Flow by Capitalization</div>', unsafe_allow_html=True)
-                        cap_counts = df_viz['MARKET_CAP'].value_counts().to_dict()
-                        total_viz = len(df_viz)
-                        
-                        cap_colors = {'Large Cap': '#00E5FF', 'Mid Cap': '#FFB300', 'Small Cap': '#F50057'}
-                        
-                        c1, c2, c3 = st.columns(3)
-                        for col, cap_type in zip([c1, c2, c3], ['Large Cap', 'Mid Cap', 'Small Cap']):
-                            count = cap_counts.get(cap_type, 0)
-                            pct = (count / total_viz) * 100 if total_viz > 0 else 0
-                            color = cap_colors[cap_type]
-                            with col:
-                                st.markdown(f"""
-                                <div class="glass-card">
-                                    <div class="cap-label">{cap_type}</div>
-                                    <div class="cap-value" style="color:{color};">{count}</div>
-                                    <div class="cap-sub">{pct:.1f}% of Total Flow</div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
-                        st.write("")
-                        st.write("")
-                        
-                        # Sector Treemap
-                        st.markdown('<div class="modern-header">Sector Displacement (30D)</div>', unsafe_allow_html=True)
-                        sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=False)
-                        fig_sector = px.treemap(
-                            sector_df, 
-                            path=[px.Constant("All Sectors"), 'SECTOR'], 
-                            values='COUNT',
-                            color='COUNT',
-                            color_continuous_scale=['#1e2a38', '#00E5FF', '#F50057'],
-                            template='plotly_dark'
-                        )
-                        fig_sector.update_layout(
-                            margin=dict(t=0, l=0, r=0, b=0),
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            font=dict(color='#FFFFFF', family='Inter, sans-serif'),
-                            coloraxis_showscale=False
-                        )
-                        fig_sector.update_traces(
-                            textinfo='label+text+value', 
-                            textfont=dict(size=14, color='white'),
-                            marker=dict(line=dict(color='#0e1117', width=2))
-                        )
-                        st.plotly_chart(fig_sector, use_container_width=True)
                 # ------------------------------------
                 
             except pd.errors.EmptyDataError:
