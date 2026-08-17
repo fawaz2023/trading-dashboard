@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime
 from config import Config
 
@@ -25,54 +26,88 @@ def get_cached_signals(df_filt):
 # FZ STANDARD THEME WITH HOVER EFFECTS & 2026 AESTHETIC
 st.markdown('''<style>
     :root { --card: rgba(255,255,255,.08); --border: rgba(255,255,255,.15); --accent:#00E5FF; }
+    
+    /* Deep space background */
     .stApp {
-        background-color: #0e1117;
-        background-image: radial-gradient(circle at 50% 0%, #1a233a 0%, #0e1117 60%);
+        background-color: #06080F;
+        background-image: radial-gradient(circle at 20% 20%, rgba(0, 229, 255, 0.05) 0%, transparent 40%),
+                          radial-gradient(circle at 80% 80%, rgba(245, 0, 87, 0.05) 0%, transparent 40%);
         color:#fff; font-family: 'Inter', 'Segoe UI', sans-serif;
     }
+
+    /* Remove Streamlit containers & borders */
+    .stPlotlyChart, .element-container {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    /* Premium Typography */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
     .section { margin: 24px 0 12px 0; font-weight: 800; font-size: 24px;
         background: linear-gradient(135deg,#00E5FF,#F50057); -webkit-background-clip:text;
-        -webkit-text-fill-color:transparent; }
-    .subsection { margin: 16px 0 8px 0; font-weight: 700; font-size: 16px; color: var(--accent); }
-    
+        -webkit-text-fill-color:transparent; font-family: 'Inter', sans-serif;}
+    .subsection { margin: 16px 0 8px 0; font-weight: 700; font-size: 16px; color: var(--accent); font-family: 'Inter', sans-serif;}
+
     /* Original Cards */
     .card { padding:20px;border-radius:16px;background:var(--card);border:1px solid var(--border);text-align:center; transition: all 0.3s ease; }
     .card:hover { transform:translateY(-5px); box-shadow:0 8px 25px rgba(0,229,255,0.2); border-color:#00E5FF; }
-    .metric .label { font-size:13px;opacity:.75;text-transform:uppercase;letter-spacing:1px }
-    .metric .value { font-size:32px;font-weight:900;color:var(--accent);margin-top:8px }
+    .metric .label { font-size:13px;opacity:.75;text-transform:uppercase;letter-spacing:1px; font-family: 'Inter', sans-serif;}
+    .metric .value { font-size:32px;font-weight:900;color:var(--accent);margin-top:8px; font-family: 'Inter', sans-serif;}
     .hero { background: linear-gradient(135deg,#1e2a38,#1a233a); border: 1px solid rgba(0,229,255,0.2); padding:32px;border-radius:24px; margin:12px 0 24px 0; box-shadow:0 16px 48px rgba(0,0,0,.4);text-align:center}
 
-    /* Glassmorphism Cards for Market Cap */
-    .glass-card {
-        background: rgba(30, 42, 56, 0.4);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 16px;
+    /* Fintech Cards */
+    .fintech-card {
+        background: rgba(20, 25, 40, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 12px;
         padding: 20px;
-        text-align: center;
-        transition: transform 0.2s ease;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s ease;
     }
-    .glass-card:hover {
-        transform: translateY(-3px);
+    .fintech-card:hover {
         border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
     }
-    .cap-label { font-size: 14px; color: #8b9bb4; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;}
-    .cap-value { font-size: 32px; font-weight: 800; }
-    .cap-sub { font-size: 12px; color: #5f6b7c; margin-top: 5px; }
     
-    /* Remove Streamlit default chart padding */
-    .stPlotlyChart { background: transparent !important; }
+    .cap-label {
+        font-size: 11px; color: #8b9bb4; 
+        text-transform: uppercase; letter-spacing: 1.5px;
+        font-family: 'Inter', sans-serif; font-weight: 600;
+    }
+    .cap-value {
+        font-size: 36px; font-weight: 800; 
+        font-family: 'Inter', sans-serif;
+        line-height: 1.2; margin-top: 5px;
+    }
     
-    /* Section headers */
-    .modern-header {
-        font-size: 20px; font-weight: 700; color: #ffffff;
-        border-left: 4px solid #00E5FF; padding-left: 12px; margin-bottom: 20px;
+    /* Glowing Progress Bar */
+    .progress-bg {
+        height: 4px; background: rgba(255,255,255,0.1); 
+        border-radius: 2px; margin-top: 15px; overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%; border-radius: 2px;
+        box-shadow: 0 0 10px currentColor; /* The glow effect */
+    }
+
+    /* Section Headers */
+    .terminal-header {
+        font-size: 14px; font-weight: 700; color: #ffffff;
+        text-transform: uppercase; letter-spacing: 1px;
+        border-left: 3px solid #00E5FF; padding-left: 12px; 
+        margin-bottom: 15px; margin-top: 10px;
+        font-family: 'Inter', sans-serif;
     }
     
     /* Dataframe hover */
     .stDataFrame tbody tr { transition: all 0.3s ease; }
     .stDataFrame tbody tr:hover { background: rgba(142,162,255,0.2) !important; transform: scale(1.02); cursor: pointer; }
+
     
     /* Premium Button */
     div.stButton > button:first-child { background: linear-gradient(135deg, #6c5ce7 0%, #8e7bff 100%); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: bold; letter-spacing: 0.5px; width: 100%; transition: all 0.3s ease; }
@@ -172,71 +207,96 @@ if page == "Dashboard":
                 cols = [c for c in ["SYMBOL","EXCHANGE","CLOSE","DELIV_PER","DELIVERY_TURNOVER","ATW"] if c in sig.columns]
                 st.dataframe(sig[cols].head(30), use_container_width=True, height=500)
                 
-                # --- 2026 AESTHETIC VISUALIZATION MOVED TO MAIN DASHBOARD ---
+                # --- 2026 COMMAND CENTER VISUALIZATION ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 LEGACY_FILE_MAIN = "data/legacy_watchlist.csv"
                 if os.path.exists(LEGACY_FILE_MAIN):
                     try:
                         df_legacy_main = pd.read_csv(LEGACY_FILE_MAIN)
                         if len(df_legacy_main) > 0:
-                            with st.expander("🌌 Institutional Flow Heatmap (30D)", expanded=True):
-                                # Mock data generation for aesthetic purposes as requested
-                                np.random.seed(42) # For consistency
-                                sectors = ['Banks', 'IT', 'Pharma', 'Auto', 'Metals', 'FMCG', 'Realty', 'Energy', 'Capital Goods', 'Consumer']
-                                caps = ['Large Cap', 'Mid Cap', 'Small Cap']
+                            # Mock data generation for aesthetic purposes
+                            np.random.seed(42)
+                            sectors = ['Banks', 'IT', 'Pharma', 'Auto', 'Metals', 'FMCG', 'Realty', 'Energy', 'Capital Goods', 'Consumer']
+                            caps = ['Large Cap', 'Mid Cap', 'Small Cap']
 
-                                df_viz = df_legacy_main.copy()
-                                df_viz['SECTOR'] = np.random.choice(sectors, len(df_viz))
-                                df_viz['MARKET_CAP'] = np.random.choice(caps, len(df_viz), p=[0.2, 0.4, 0.4])
+                            df_viz = df_legacy_main.copy()
+                            df_viz['SECTOR'] = np.random.choice(sectors, len(df_viz))
+                            df_viz['MARKET_CAP'] = np.random.choice(caps, len(df_viz), p=[0.2, 0.4, 0.4])
 
-                                # Market Cap Distribution Cards
-                                st.markdown('<div class="modern-header">Smart Money Flow by Capitalization</div>', unsafe_allow_html=True)
+                            col_left, col_right = st.columns([1.5, 1])
+
+                            with col_left:
+                                st.markdown('<div class="terminal-header">Sector Displacement Radar</div>', unsafe_allow_html=True)
+                                
+                                sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=True)
+                                
+                                fig = go.Figure(go.Barpolar(
+                                    r=sector_df['COUNT'],
+                                    theta=sector_df['SECTOR'],
+                                    marker=dict(
+                                        color=sector_df['COUNT'],
+                                        colorscale=[[0, '#00E5FF'], [0.5, '#FFB300'], [1, '#F50057']],
+                                        line=dict(color='rgba(0,0,0,0)', width=0)
+                                    ),
+                                    opacity=0.9,
+                                    text=sector_df['COUNT'],
+                                    texttemplate='%{text}',
+                                    textfont=dict(color='white', size=12, family='Inter'),
+                                    hovertemplate='<b>%{theta}</b><br>Signals: %{r}<extra></extra>'
+                                ))
+                                
+                                fig.update_layout(
+                                    margin=dict(t=20, l=20, r=20, b=20),
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    font=dict(color='#8b9bb4', family='Inter, sans-serif'),
+                                    polar=dict(
+                                        hole=0.4,
+                                        radialaxis=dict(showticklabels=False, gridcolor='rgba(255,255,255,0.03)', linecolor='rgba(255,255,255,0)'),
+                                        angularaxis=dict(gridcolor='rgba(255,255,255,0.05)', linecolor='rgba(255,255,255,0)', rotation=90)
+                                    ),
+                                    showlegend=False
+                                )
+                                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+                            with col_right:
+                                st.markdown('<div class="terminal-header">Smart Money Flow</div>', unsafe_allow_html=True)
+                                
                                 cap_counts = df_viz['MARKET_CAP'].value_counts().to_dict()
                                 total_viz = len(df_viz)
-
                                 cap_colors = {'Large Cap': '#00E5FF', 'Mid Cap': '#FFB300', 'Small Cap': '#F50057'}
-
-                                c1_cap, c2_cap, c3_cap = st.columns(3)
-                                for col, cap_type in zip([c1_cap, c2_cap, c3_cap], ['Large Cap', 'Mid Cap', 'Small Cap']):
+                                
+                                for cap_type in ['Large Cap', 'Mid Cap', 'Small Cap']:
                                     count = cap_counts.get(cap_type, 0)
                                     pct = (count / total_viz) * 100 if total_viz > 0 else 0
                                     color = cap_colors[cap_type]
-                                    with col:
-                                        st.markdown(f"""
-                                        <div class="glass-card">
-                                            <div class="cap-label">{cap_type}</div>
-                                            <div class="cap-value" style="color:{color};">{count}</div>
-                                            <div class="cap-sub">{pct:.1f}% of Total Flow</div>
+                                    
+                                    style1 = "margin-bottom: 15px;"
+                                    style2 = "display: flex; justify-content: space-between; align-items: center;"
+                                    style3 = f"color:{color};"
+                                    style4 = "text-align: right;"
+                                    style5 = "font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px;"
+                                    style6 = "font-size: 20px; font-weight: 600; color: #fff; margin-top: 5px;"
+                                    style7 = f"width: {pct}%; background-color: {color}; color: {color};"
+                                    
+                                    html_str = f"""
+                                    <div class="fintech-card" style="{style1}">
+                                        <div style="{style2}">
+                                            <div>
+                                                <div class="cap-label">{cap_type}</div>
+                                                <div class="cap-value" style="{style3}">{count}</div>
+                                            </div>
+                                            <div style="{style4}">
+                                                <div style="{style5}">Flow %</div>
+                                                <div style="{style6}">{pct:.1f}%</div>
+                                            </div>
                                         </div>
-                                        """, unsafe_allow_html=True)
-
-                                st.write("")
-                                st.write("")
-
-                                # Sector Treemap
-                                st.markdown('<div class="modern-header">Sector Displacement (30D)</div>', unsafe_allow_html=True)
-                                sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=False)
-                                fig_sector = px.treemap(
-                                    sector_df,
-                                    path=[px.Constant("All Sectors"), 'SECTOR'],
-                                    values='COUNT',
-                                    color='COUNT',
-                                    color_continuous_scale=['#1e2a38', '#00E5FF', '#F50057'],
-                                    template='plotly_dark'
-                                )
-                                fig_sector.update_layout(
-                                    margin=dict(t=0, l=0, r=0, b=0),
-                                    paper_bgcolor='rgba(0,0,0,0)',
-                                    plot_bgcolor='rgba(0,0,0,0)',
-                                    font=dict(color='#FFFFFF', family='Inter, sans-serif'),
-                                    coloraxis_showscale=False
-                                )
-                                fig_sector.update_traces(
-                                    textinfo='label+text+value',
-                                    textfont=dict(size=14, color='white'),
-                                    marker=dict(line=dict(color='#0e1117', width=2))
-                                )
-                                st.plotly_chart(fig_sector, use_container_width=True)
+                                        <div class="progress-bg">
+                                            <div class="progress-fill" style="{style7}"></div>
+                                        </div>
+                                    </div>
+                                    """
+                                    st.markdown(html_str, unsafe_allow_html=True)
                     except Exception as e:
                         st.error(f"Could not load heatmap: {e}")
                 # -----------------------------------------------------------------
