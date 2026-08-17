@@ -261,10 +261,16 @@ if page == "Dashboard":
                                 
                                 # Add total signals to the center of the donut
                                 fig.add_annotation(
-                                    text=f"<span style='font-size:14px;color:#8b9bb4;letter-spacing:1px;'>TOTAL SIGNALS</span><br><span style='font-size:42px;font-weight:800;color:#ffffff;'>{total_signals}</span>",
-                                    x=0.5, y=0.5,
+                                    text="TOTAL SIGNALS",
+                                    x=0.5, y=0.56,
                                     showarrow=False,
-                                    font=dict(family='Inter, sans-serif')
+                                    font=dict(family='Inter, sans-serif', size=13, color='#8b9bb4')
+                                )
+                                fig.add_annotation(
+                                    text=f"{total_signals}",
+                                    x=0.5, y=0.45,
+                                    showarrow=False,
+                                    font=dict(family='Inter, sans-serif', size=46, color='#ffffff')
                                 )
                                 
                                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
