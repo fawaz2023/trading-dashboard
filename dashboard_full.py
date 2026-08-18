@@ -417,10 +417,33 @@ elif page == "Data Health":
             return "🟢 Synced"
         return "🔴 Missing"
 
-    nse_bhav_date = status_data.get("nse_bhav_date", "Unknown")
-    nse_deliv_date = status_data.get("nse_deliv_date", "Unknown")
-    bse_bhav_date = status_data.get("bse_bhav_date", "Unknown")
-    bse_deliv_date = status_data.get("bse_deliv_date", "Unknown")
+    # Calculate dates dynamically from the actual cloud data to permanently fix the sync issue
+    nse_bhav_date, nse_deliv_date, bse_bhav_date, bse_deliv_date = "Missing", "Missing", "Missing", "Missing"
+    
+    if df is not None and not df.empty and "DATE" in df.columns:
+        # Working with a copy to avoid SettingWithCopyWarning if df was a slice
+        temp_df = df.copy()
+        temp_df["_parsed_date"] = pd.to_datetime(temp_df["DATE"], errors='coerce')
+        
+        # 1. NSE Bhavcopy
+        nse_mask = temp_df["EXCHANGE"] == "NSE"
+        if nse_mask.any():
+            nse_bhav_date = temp_df[nse_mask]["_parsed_date"].max().strftime("%d %b %Y")
+            
+        # 2. NSE Delivery (Requires DELIV_PER > 0)
+        nse_deliv_mask = nse_mask & temp_df["DELIV_PER"].notna() & (temp_df["DELIV_PER"] > 0)
+        if nse_deliv_mask.any():
+            nse_deliv_date = temp_df[nse_deliv_mask]["_parsed_date"].max().strftime("%d %b %Y")
+            
+        # 3. BSE Bhavcopy
+        bse_mask = temp_df["EXCHANGE"] == "BSE"
+        if bse_mask.any():
+            bse_bhav_date = temp_df[bse_mask]["_parsed_date"].max().strftime("%d %b %Y")
+            
+        # 4. BSE Delivery (Requires DELIV_PER > 0)
+        bse_deliv_mask = bse_mask & temp_df["DELIV_PER"].notna() & (temp_df["DELIV_PER"] > 0)
+        if bse_deliv_mask.any():
+            bse_deliv_date = temp_df[bse_deliv_mask]["_parsed_date"].max().strftime("%d %b %Y")
 
     with col1:
         st.metric(label="📈 NSE Bhavcopy", value=f"{nse_bhav_date}", delta=get_status_ui(nse_bhav_date), delta_color="off")
