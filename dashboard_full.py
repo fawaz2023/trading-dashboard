@@ -157,7 +157,14 @@ def style_actionable_band(val):
 def metric(label, value):
     st.markdown(f"<div class='card metric'><div class='label'>{label}</div><div class='value'>{value}</div></div>", unsafe_allow_html=True)
 
-page = st.sidebar.radio("Navigation", ["Dashboard", "Signals", "SBIA Institutional Engine", "Verify Conditions", "Watchlist", "Win Rate", "Data Health"])
+# URL Routing state management to survive browser refreshes
+PAGES = ["Dashboard", "Signals", "SBIA Institutional Engine", "Verify Conditions", "Watchlist", "Win Rate", "Data Health"]
+default_idx = 0
+if "page" in st.query_params and st.query_params["page"] in PAGES:
+    default_idx = PAGES.index(st.query_params["page"])
+
+page = st.sidebar.radio("Navigation", PAGES, index=default_idx)
+st.query_params["page"] = page
 st.sidebar.divider()
 if st.sidebar.button("Force Data Refresh", help="Clear cache and reload latest data from disk", use_container_width=True):
     st.cache_data.clear()
