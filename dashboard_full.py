@@ -157,15 +157,23 @@ def style_actionable_band(val):
 def metric(label, value):
     st.markdown(f"<div class='card metric'><div class='label'>{label}</div><div class='value'>{value}</div></div>", unsafe_allow_html=True)
 
-# URL Routing state management to survive browser refreshes (Streamlit 1.28 compatible)
+# URL Routing state management (Cross-version compatible)
 PAGES = ["Dashboard", "Signals", "SBIA Institutional Engine", "Verify Conditions", "Watchlist", "Win Rate", "Data Health"]
 default_idx = 0
-params = st.experimental_get_query_params()
-if "page" in params and params["page"][0] in PAGES:
-    default_idx = PAGES.index(params["page"][0])
-
-page = st.sidebar.radio("Navigation", PAGES, index=default_idx)
-st.experimental_set_query_params(page=page)
+try:
+    # Modern Streamlit (Local - v1.30+)
+    params = st.query_params
+    if "page" in params and params["page"] in PAGES:
+        default_idx = PAGES.index(params["page"])
+    page = st.sidebar.radio("Navigation", PAGES, index=default_idx)
+    st.query_params["page"] = page
+except AttributeError:
+    # Legacy Streamlit (Cloud - v1.28)
+    params = st.experimental_get_query_params()
+    if "page" in params and params["page"][0] in PAGES:
+        default_idx = PAGES.index(params["page"][0])
+    page = st.sidebar.radio("Navigation", PAGES, index=default_idx)
+    st.experimental_set_query_params(page=page)
 st.sidebar.divider()
 if st.sidebar.button("Force Data Refresh", help="Clear cache and reload latest data from disk", use_container_width=True):
     st.cache_data.clear()
@@ -214,7 +222,10 @@ if page == "Dashboard":
                 st.success(f"✅ Found {len(sig)} signals passing all 12 conditions")
                 cols = [c for c in ["SYMBOL","EXCHANGE","CLOSE","DELIV_PER","DELIVERY_TURNOVER","ATW"] if c in sig.columns]
                 st.dataframe(sig[cols].head(30), use_container_width=True, height=500)
+            else:
+                st.info("📭 No signals found")
                 
+            if True: # Always render visualization regardless of daily signal count
                 # --- 2026 COMMAND CENTER VISUALIZATION ---
                 st.markdown("<br>", unsafe_allow_html=True)
                 LEGACY_FILE_MAIN = "data/legacy_watchlist.csv"
