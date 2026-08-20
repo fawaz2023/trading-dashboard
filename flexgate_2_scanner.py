@@ -118,13 +118,13 @@ def process_flexgate_engine(df, current_date):
     )
     
     # Phase 2: Anomaly Tripwires
-    trigger_a = (df['DELIVERY_TURNOVER_1M'] > 0) & (df['DELIVERY_TURNOVER'] > 1.5 * df['DELIVERY_TURNOVER_1M'])
+    trigger_a = (df['DELIVERY_TURNOVER_1M'] > 0) & (df['DELIVERY_TURNOVER'] > 2.0 * df['DELIVERY_TURNOVER_1M'])
     
     whale_density = (df['ATW'] / df['VWAP'].replace(0, np.nan)).fillna(0)
     whale_density_1m = (df['ATW_1M'] / df['VWAP_1M'].replace(0, np.nan)).fillna(0)
-    trigger_b = (whale_density_1m > 0) & (whale_density > 1.5 * whale_density_1m)
+    trigger_b = (whale_density_1m > 0) & (whale_density > 2.0 * whale_density_1m)
     
-    trigger_c = (df['DELIV_PER_1M'] > 0) & (df['DELIV_PER'] > 1.2 * df['DELIV_PER_1M'])
+    trigger_c = (df['DELIV_PER_1M'] > 0) & (df['DELIV_PER'] > 1.5 * df['DELIV_PER_1M'])
     
     # Accumulation Alert
     df['IS_FLEXGATE_ALERT'] = p1 & (trigger_a | trigger_b | trigger_c)
@@ -147,12 +147,12 @@ def process_flexgate_engine(df, current_date):
     
     # Find all unique trading dates in archive
     all_dates = sorted(updated_archive['DATE'].unique())
-    last_21_dates = all_dates[-21:] if len(all_dates) >= 21 else all_dates
+    last_10_dates = all_dates[-10:] if len(all_dates) >= 10 else all_dates
     
-    # Filter to last 21 dates
-    recent_archive = updated_archive[updated_archive['DATE'].isin(last_21_dates)]
+    # Filter to last 10 dates
+    recent_archive = updated_archive[updated_archive['DATE'].isin(last_10_dates)]
     
-    # Phase 3: Exactly TWO accumulation alerts in trailing 21 days
+    # Phase 3: Exactly TWO accumulation alerts in trailing 10 days
     trigger_counts = recent_archive['SYMBOL'].value_counts()
     exact_two_symbols = trigger_counts[trigger_counts == 2].index.tolist()
     
