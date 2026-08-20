@@ -605,7 +605,7 @@ elif page == "SBIA Institutional Engine":
     </div>
     """, unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["🔬 Legacy Screener", "🏆 SBIA Alpha Engine (High-Velocity)", "🔭 SBIA FlexGate Engine (Base-Loading)"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🔬 Legacy Screener", "🏆 SBIA Alpha Engine (High-Velocity)", "🔭 SBIA FlexGate Engine (Base-Loading)", "🤖 FlexGate 2.0 (ML Engine)"])
     
     with tab1:
         st.markdown("<div class='subsection'>🔬 Phase 1: Institutional Screener (Raw ATW Unverified)</div>", unsafe_allow_html=True)
@@ -1069,6 +1069,62 @@ elif page == "SBIA Institutional Engine":
                 st.warning("⚠️ No stocks passed the strict FlexGate logic today.")
         else:
             st.warning("Run calculate_active_signals.py to generate the FlexGate Watchlist.")
+            
+    with tab4:
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, rgba(231, 76, 60, 0.1), rgba(192, 57, 43, 0.05)); border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+            <h3 style='margin-top: 0; color: #e74c3c; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>🤖</span> FlexGate 2.0 (ML Engine)</h3>
+            <p style='margin-bottom: 0; opacity: 0.9;'>These signals survived the ML Heuristic Bouncer (ATR > 3.5%) and scored &ge; 60% on the Random Forest engine.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        FLEXGATE2_FILE = "data/sbia_flexgate2_watchlist.csv"
+        if os.path.exists(FLEXGATE2_FILE):
+            try:
+                df_flex2 = pd.read_csv(FLEXGATE2_FILE)
+            except pd.errors.EmptyDataError:
+                df_flex2 = pd.DataFrame()
+                
+            if len(df_flex2) > 0:
+                if "DATE" in df_flex2.columns:
+                    df_flex2["DATE"] = pd.to_datetime(df_flex2["DATE"], errors="coerce").dt.strftime("%d %b %Y")
+                
+                if "AI_WIN_PROBABILITY" in df_flex2.columns and "AI_APPROVED" in df_flex2.columns:
+                    df_flex2["AI_STATUS"] = df_flex2.apply(
+                        lambda r: f"✅ {r['AI_WIN_PROBABILITY']:.1f}%" if r["AI_APPROVED"] else f"❌ {r['AI_WIN_PROBABILITY']:.1f}%",
+                        axis=1
+                    )
+                
+                format_dict_f2 = {
+                    "CLOSE": "₹{:.2f}",
+                    "ATR14": "₹{:.2f}",
+                    "CHANDELIER_EXIT": "₹{:.2f}",
+                    "REC_POS_SIZE_INR": "₹{:,.0f}",
+                    "SIS": "{:.2f}",
+                    "Whale_Density": "{:.2f}",
+                    "Implied_Trades": "{:,.0f}"
+                }
+                
+                display_cols_f2 = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_STATUS", "SIS", "Whale_Density", "Implied_Trades", "CHANDELIER_EXIT", "REC_POS_SIZE_INR", "ATR14"]
+                avail_cols_f2 = [c for c in display_cols_f2 if c in df_flex2.columns]
+
+                def color_ai_status2(val):
+                    if isinstance(val, str) and val.startswith("✅"):
+                        return "color: #2ecc71; font-weight: bold; background-color: rgba(46, 204, 113, 0.1);"
+                    if isinstance(val, str) and val.startswith("❌"):
+                        return "color: #e74c3c; font-style: italic; background-color: rgba(231, 76, 60, 0.05);"
+                    return ""
+
+                if "AI_STATUS" in avail_cols_f2:
+                    styled_flex2 = df_flex2[avail_cols_f2].style.format(format_dict_f2).map(color_ai_status2, subset=["AI_STATUS"])
+                else:
+                    styled_flex2 = df_flex2[avail_cols_f2].style.format(format_dict_f2)
+                    
+                st.dataframe(styled_flex2, use_container_width=True, hide_index=True)
+            else:
+                st.warning("⚠️ No stocks passed the strict FlexGate 2.0 ML logic today.")
+        else:
+            st.warning("Run flexgate_2_scanner.py to generate the FlexGate 2.0 Watchlist.")
 
 # VERIFY CONDITIONS
 elif page == "Verify Conditions":
