@@ -968,6 +968,14 @@ elif page == "SBIA Institutional Engine":
                 total_invested = 0.0
                 
                 for idx, row in df_flex.iterrows():
+                    # Only simulate trades for AI APPROVED signals
+                    if row.get('AI_APPROVED', False) == False:
+                        continue
+                        
+                    # Stop allocating if we are out of cash
+                    if total_invested >= capital:
+                        continue
+                        
                     sym = row['SYMBOL']
                     entry = row['CLOSE']
                     sl = row.get('CHANDELIER_EXIT', pd.NA)
@@ -985,6 +993,11 @@ elif page == "SBIA Institutional Engine":
                         if invested > capital * 0.10:
                             invested = capital * 0.10
                             shares = invested / entry
+                            
+                    # Hard cap so we don't exceed remaining capital
+                    if total_invested + invested > capital:
+                        invested = capital - total_invested
+                        shares = invested / entry if entry > 0 else 0
                             
                     total_invested += invested
                         
