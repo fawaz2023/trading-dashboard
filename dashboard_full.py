@@ -249,22 +249,22 @@ if page == "Dashboard":
                                 
                                 sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=True)
                                 total_signals = len(df_viz)
-                                # --- COLOR LOGIC: Neon, Dark Base, and Glow (RGBA) ---
+                                # --- COLOR LOGIC: Solid Neon and Glowing RGBA counterpart ---
                                 def get_colors(count):
                                     if count >= 6:
-                                        return '#F50057', '#800033', 'rgba(245, 0, 87, 0.25)'  # Magenta
+                                        return '#F50057', 'rgba(245, 0, 87, 0.35)'  # Magenta
                                     elif count >= 4:
-                                        return '#FFB300', '#805400', 'rgba(255, 179, 0, 0.25)' # Amber
+                                        return '#FFB300', 'rgba(255, 179, 0, 0.35)' # Amber
                                     else:
-                                        return '#00E5FF', '#006B7A', 'rgba(0, 229, 255, 0.25)' # Cyan
+                                        return '#00E5FF', 'rgba(0, 229, 255, 0.35)' # Cyan
 
                                 # --- BUILD THE NEON TUBE CHART ---
                                 fig = go.Figure()
 
                                 for index, row in sector_df.iterrows():
-                                    neon, dark, glow = get_colors(row['COUNT'])
+                                    neon, glow = get_colors(row['COUNT'])
                                     
-                                    # Layer 1: The Glow / Halation (semi-transparent, wider)
+                                    # Layer 1: The Glow / Halation
                                     fig.add_trace(go.Bar(
                                         x=[row['COUNT']],
                                         y=[row['SECTOR']],
@@ -275,19 +275,19 @@ if page == "Dashboard":
                                         showlegend=False
                                     ))
                                     
-                                    # Layer 2: The Main Gradient Bar
+                                    # Layer 2: The Main Solid Neon Bar
                                     fig.add_trace(go.Bar(
                                         x=[row['COUNT']],
                                         y=[row['SECTOR']],
                                         orientation='h',
                                         marker=dict(
                                             color=neon,
-                                            line=dict(color='rgba(255,255,255,0.1)', width=1)
+                                            line=dict(color='rgba(255,255,255,0.3)', width=1)
                                         ),
                                         width=0.55,
                                         text=[row['COUNT']],
                                         textposition='outside',
-                                        textfont=dict(color='#FFFFFF', size=16, family='Inter, sans-serif'),
+                                        textfont=dict(color='#FFFFFF', size=16, family='Arial Black, sans-serif'),
                                         hovertemplate=f'<b>{row["SECTOR"]}</b><br>Signals: {row["COUNT"]}<extra></extra>',
                                         showlegend=False
                                     ))
