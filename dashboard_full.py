@@ -281,8 +281,7 @@ if page == "Dashboard":
                                         y=[row['SECTOR']],
                                         orientation='h',
                                         marker=dict(
-                                            color=dark,
-                                            gradient=dict(type='horizontal', color=neon),
+                                            color=neon,
                                             line=dict(color='rgba(255,255,255,0.1)', width=1)
                                         ),
                                         width=0.55,
