@@ -787,12 +787,12 @@ elif page == "SBIA Institutional Engine":
                             st.markdown("""
                             <div style='background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(39, 174, 96, 0.05)); border: 1px solid rgba(46, 204, 113, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
                                 <h3 style='margin-top: 0; color: #2ecc71; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>💰</span> ₹10L Velocity Simulation</h3>
-                                <p style='margin-bottom: 0; opacity: 0.9;'>Tracking total Realized and Unrealized PnL assuming a ₹1,000,000 base capital, risking exactly 1.5% (₹15,000) per trade based on the exact Stop Loss distance on entry day.</p>
+                                <p style='margin-bottom: 0; opacity: 0.9;'>Tracking total Realized and Unrealized PnL assuming a ₹1,000,000 base capital, risking exactly 3.0% (₹30,000) per trade based on the exact Stop Loss distance on entry day.</p>
                             </div>
                             """, unsafe_allow_html=True)
                             
                             capital = 1000000.0
-                            risk_per_trade = capital * 0.015 # 15000
+                            risk_per_trade = capital * 0.030 # 30000
                             
                             sim_records = []
                             total_realized = 0.0
@@ -957,12 +957,12 @@ elif page == "SBIA Institutional Engine":
                 st.markdown("""
                 <div style='background: linear-gradient(135deg, rgba(142, 162, 255, 0.1), rgba(11, 124, 255, 0.05)); border: 1px solid rgba(142, 162, 255, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
                     <h3 style='margin-top: 0; color: #8ea2ff; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>💰</span> ₹10L FlexGate Simulation</h3>
-                    <p style='margin-bottom: 0; opacity: 0.9;'>Capital allocation based on a ₹1,000,000 base, risking exactly 1.5% (₹15,000) per trade based on the <strong>Chandelier Exit</strong> distance.</p>
+                    <p style='margin-bottom: 0; opacity: 0.9;'>Capital allocation based on a ₹1,000,000 base, risking exactly 3.0% (₹30,000) per trade based on the <strong>Chandelier Exit</strong> distance.</p>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 capital = 1000000.0
-                risk_per_trade = capital * 0.015 # 15000
+                risk_per_trade = capital * 0.030 # 30000
                 
                 sim_records = []
                 total_invested = 0.0
