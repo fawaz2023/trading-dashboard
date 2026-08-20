@@ -1173,28 +1173,165 @@ elif page == "Verify Conditions":
 
 # WATCHLIST
 elif page == "Watchlist":
-    st.markdown("<div class='section'>Active Watchlist</div>", unsafe_allow_html=True)
-    try:
-        from watchlist_manager import WatchlistManager
-        wm = WatchlistManager()
-        
-        if len(wm.active) > 0:
-            # Update prices first
-            LIVE_FILE = "data/dashboard_cloud.csv"
+        st.markdown("<div class='section'>Active Watchlist</div>", unsafe_allow_html=True)
+        try:
+            from watchlist_manager import WatchlistManager
+            wm = WatchlistManager()
+            
+            # --- 1. LOAD SCANNER UNIVERSE ---
+            @st.cache_data(ttl=3600)
+            def load_scanner_universe():
+                universe_symbols = set()
+                symbol_to_scanner = {}
+                
+                master_df = pd.DataFrame()
+                LIVE_FILE = "data/dashboard_cloud.csv"
+                if os.path.exists(LIVE_FILE):
+                    master_df = pd.read_csv(LIVE_FILE)
+                    try:
+                        # 12-Condition Signals
+                        sig_df = get_cached_signals(master_df)
+                        for sym in sig_df['SYMBOL'].dropna().unique():
+                            universe_symbols.add(sym)
+                            symbol_to_scanner[sym] = "12-Condition Scanner"
+                    except: pass
+                
+                if os.path.exists("data/sbia_alpha_watchlist.csv"):
+                    df_alpha = pd.read_csv("data/sbia_alpha_watchlist.csv")
+                    for sym in df_alpha['SYMBOL'].dropna().unique():
+                        universe_symbols.add(sym)
+                        symbol_to_scanner[sym] = "SBIA Alpha Engine"
+                        
+                if os.path.exists("data/sbia_flexgate_watchlist.csv"):
+                    df_legacy = pd.read_csv("data/sbia_flexgate_watchlist.csv")
+                    for sym in df_legacy['SYMBOL'].dropna().unique():
+                        universe_symbols.add(sym)
+                        if sym not in symbol_to_scanner or symbol_to_scanner[sym] == "12-Condition Scanner":
+                            symbol_to_scanner[sym] = "Legacy FlexGate"
+                            
+                if os.path.exists("data/sbia_flexgate2_watchlist.csv"):
+                    df_fg2 = pd.read_csv("data/sbia_flexgate2_watchlist.csv")
+                    if 'AI_APPROVED' in df_fg2.columns:
+                        df_fg2 = df_fg2[df_fg2['AI_APPROVED'] == True]
+                    for sym in df_fg2['SYMBOL'].dropna().unique():
+                        universe_symbols.add(sym)
+                        symbol_to_scanner[sym] = "FlexGate 2.0 ML Engine"
+                        
+                records = [{"SYMBOL": sym, "SCANNER_NAME": symbol_to_scanner[sym]} for sym in universe_symbols]
+                return master_df, pd.DataFrame(records)
 
+            master_df, universe_df = load_scanner_universe()
 
-            if os.path.exists(LIVE_FILE):
-                df = load_live_data(LIVE_FILE, os.path.getmtime(LIVE_FILE))
-                wm.auto_update_prices(df)
-                wm = WatchlistManager()  # Reload after update
+            # --- 2. WATCHLIST SEARCH UI ---
+            st.markdown('<div class="subsection" style="margin-top: 0;">Add Scanner Stock to Watchlist</div>', unsafe_allow_html=True)
             
-            st.markdown("<div class='subsection'>Manage Positions</div>", unsafe_allow_html=True)
+            if not universe_df.empty:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    universe_df['DISPLAY'] = universe_df['SYMBOL'] + "  |  " + universe_df['SCANNER_NAME'].fillna('Signal')
+                    selected_option = st.selectbox(
+                        "Search for a stock that recently triggered a scanner:",
+                        options=universe_df['DISPLAY'].unique(),
+                        index=None,
+                        placeholder="Type symbol or scanner name..."
+                    )
+
+                # --- 3. LIVE METRIC PREVIEW & ADD LOGIC ---
+                if selected_option:
+                    selected_symbol = selected_option.split("  |  ")[0]
+                    
+                    stock_data_match = master_df[master_df['SYMBOL'] == selected_symbol]
+                    stock_data = stock_data_match.iloc[0] if not stock_data_match.empty else {}
+                    
+                    try:
+                        import yfinance as yf
+                        ticker = yf.Ticker(selected_symbol + ".NS")
+                        live_price = ticker.fast_info['last_price']
+                    except:
+                        live_price = stock_data.get('CLOSE', 0.0)
+                        
+                    st.markdown(f"""
+                    <div style="background: rgba(20, 25, 40, 0.6); border: 1px solid rgba(0, 229, 255, 0.3); border-radius: 10px; padding: 15px; margin-top: 10px; margin-bottom: 20px;">
+                        <h3 style="color: #00E5FF; margin-bottom: 10px; margin-top: 0;">{selected_symbol} Preview</h3>
+                        <div style="display: flex; justify-content: space-between; color: white; font-family: 'Inter', sans-serif;">
+                            <div>
+                                <div style="font-size: 12px; color: #8b9bb4;">LIVE PRICE</div>
+                                <div style="font-size: 24px; font-weight: 800;">₹{live_price:.2f}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: #8b9bb4;">DELIVERY %</div>
+                                <div style="font-size: 24px; font-weight: 800;">{stock_data.get('DELIV_PER', 0):.2f}%</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: #8b9bb4;">SCANNER</div>
+                                <div style="font-size: 24px; font-weight: 800;">{universe_df[universe_df['SYMBOL'] == selected_symbol]['SCANNER_NAME'].values[0]}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    with st.form("add_to_watchlist_form"):
+                        st.markdown("**Set Position Parameters**")
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            entry_price = st.number_input("Entry Price", value=float(live_price), step=0.05)
+                        with c2:
+                            target_price = st.number_input("Target Price", value=float(live_price * 1.10), step=0.05)
+                        with c3:
+                            stop_loss = st.number_input("Stop Loss", value=float(live_price * 0.95), step=0.05)
+                            
+                        submitted = st.form_submit_button("➕ Add to Active Watchlist", type="primary")
+                        
+                        if submitted:
+                            success, msg = wm.add_stock(
+                                symbol=selected_symbol,
+                                entry_price=entry_price,
+                                delivery_pct=stock_data.get('DELIV_PER', 0),
+                                momentum=0
+                            )
+                            if success:
+                                st.success(f"{selected_symbol} added to Watchlist! Tracking PnL active.")
+                                st.rerun()
+                            else:
+                                st.error(msg)
+            else:
+                st.info("No scanner signals currently active.")
             
-            # Use data_editor for inline editing
-            display_cols = ["symbol", "entry_price", "current_price", "tp", "sl", "entry_date"]
-            display_df = wm.active[display_cols].copy()
-            
-            st.dataframe(display_df, use_container_width=True, height=400)
+            st.markdown("<hr>", unsafe_allow_html=True)
+
+            if len(wm.active) > 0:
+                LIVE_FILE = "data/dashboard_cloud.csv"
+                if os.path.exists(LIVE_FILE):
+                    df = load_live_data(LIVE_FILE, os.path.getmtime(LIVE_FILE))
+                    wm.auto_update_prices(df)
+                    wm = WatchlistManager()  # Reload after update
+                
+                st.markdown("<div class='subsection'>Manage Positions</div>", unsafe_allow_html=True)
+                
+                display_cols = ["symbol", "entry_price", "current_price", "tp", "sl", "entry_date"]
+                display_df = wm.active[display_cols].copy()
+                
+                # Add PnL % Column
+                display_df['PnL_%'] = ((display_df['current_price'] - display_df['entry_price']) / display_df['entry_price']) * 100
+                
+                def color_pnl(val):
+                    if pd.isna(val): return ""
+                    color = '#00E5FF' if val >= 0 else '#F50057'
+                    return f'color: {color}; font-weight: bold'
+
+                format_dict = {
+                    "entry_price": "₹{:.2f}",
+                    "current_price": "₹{:.2f}",
+                    "tp": "₹{:.2f}",
+                    "sl": "₹{:.2f}",
+                    "PnL_%": "{:+.2f}%"
+                }
+
+                st.dataframe(
+                    display_df.style.format(format_dict).map(color_pnl, subset=['PnL_%']),
+                    use_container_width=True, 
+                    hide_index=True
+                )
             
             # Delete section with explicit stock selection
             st.markdown("<div class='subsection'>Close Position (Record Trade)</div>", unsafe_allow_html=True)
