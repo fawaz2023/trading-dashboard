@@ -800,6 +800,15 @@ elif page == "SBIA Institutional Engine":
                             wins = 0
                             losses = 0
                             
+                            # Load latest market prices for accurate Unrealized PnL
+                            latest_prices = {}
+                            if os.path.exists("data/dashboard_cloud.csv"):
+                                try:
+                                    live_df = pd.read_csv("data/dashboard_cloud.csv", usecols=["SYMBOL", "CLOSE"])
+                                    latest_prices = live_df.drop_duplicates(subset=["SYMBOL"]).set_index("SYMBOL")["CLOSE"].to_dict()
+                                except Exception:
+                                    pass
+                            
                             for idx, row in ledger_full.iterrows():
                                 sym = row['SYMBOL']
                                 entry = row['ENTRY_PRICE']
@@ -836,10 +845,8 @@ elif page == "SBIA Institutional Engine":
                                     elif status == 'HIT_SL' or r_pnl < 0: losses += 1
                                     
                                 else:
-                                    # Active trade, get current price from df_alpha
-                                    current_px = entry
-                                    if sym in df_alpha['SYMBOL'].values:
-                                        current_px = df_alpha[df_alpha['SYMBOL'] == sym]['CLOSE'].iloc[0]
+                                    # Active trade, get current price from live market data
+                                    current_px = latest_prices.get(sym, entry)
                                     u_pnl = shares * (current_px - entry)
                                     total_unrealized += u_pnl
                                     current_value = invested + u_pnl
@@ -966,6 +973,16 @@ elif page == "SBIA Institutional Engine":
                 
                 sim_records = []
                 total_invested = 0.0
+                total_unrealized = 0.0
+                
+                # Load latest market prices for accurate Unrealized PnL
+                latest_prices = {}
+                if os.path.exists("data/dashboard_cloud.csv"):
+                    try:
+                        live_df = pd.read_csv("data/dashboard_cloud.csv", usecols=["SYMBOL", "CLOSE"])
+                        latest_prices = live_df.drop_duplicates(subset=["SYMBOL"]).set_index("SYMBOL")["CLOSE"].to_dict()
+                    except Exception:
+                        pass
                 
                 for idx, row in df_flex.iterrows():
                     # Only simulate trades for AI APPROVED signals
@@ -977,7 +994,7 @@ elif page == "SBIA Institutional Engine":
                         continue
                         
                     sym = row['SYMBOL']
-                    entry = row['CLOSE']
+                    entry = row['CLOSE'] # This is the historical close (entry)
                     sl = row.get('CHANDELIER_EXIT', pd.NA)
                     
                     if pd.isna(entry) or pd.isna(sl) or entry <= sl:
@@ -1000,6 +1017,10 @@ elif page == "SBIA Institutional Engine":
                         shares = invested / entry if entry > 0 else 0
                             
                     total_invested += invested
+                    
+                    curr_px = latest_prices.get(sym, entry)
+                    u_pnl = shares * (curr_px - entry)
+                    total_unrealized += u_pnl
                         
                     sim_records.append({
                         "DATE": row["DATE"],
@@ -1007,6 +1028,9 @@ elif page == "SBIA Institutional Engine":
                         "STATUS": "ACTIVE",
                         "INVESTED": invested,
                         "ENTRY_PRICE": entry,
+                        "CURRENT_PRICE": curr_px,
+                        "UNREALIZED_PNL": u_pnl,
+                        "PNL_%": (u_pnl / invested * 100) if invested > 0 else 0,
                         "CHANDELIER_EXIT": sl,
                         "SHARES": shares
                     })
@@ -1016,7 +1040,7 @@ elif page == "SBIA Institutional Engine":
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Total Capital", f"₹{capital:,.0f}")
                 c2.metric("Total Allocated", f"₹{total_invested:,.0f}", f"{(total_invested / capital) * 100:.1f}% Deployed")
-                c3.metric("Available Cash", f"₹{(capital - total_invested):,.0f}")
+                c3.metric("Running Unrealized PnL", f"₹{total_unrealized:,.0f}", f"{(total_unrealized / total_invested) * 100 if total_invested > 0 else 0:+.2f}%")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
@@ -1024,11 +1048,24 @@ elif page == "SBIA Institutional Engine":
                     format_sim = {
                         "INVESTED": "₹{:,.0f}",
                         "ENTRY_PRICE": "₹{:.2f}",
+                        "CURRENT_PRICE": "₹{:.2f}",
+                        "UNREALIZED_PNL": "₹{:,.0f}",
+                        "PNL_%": "{:+.1f}%",
                         "CHANDELIER_EXIT": "₹{:.2f}",
                         "SHARES": "{:,.0f}"
                     }
                     
-                    styled_sim = sim_df.style.format(format_sim)
+                    def color_pnl(val):
+                        if pd.isna(val): return ""
+                        if val > 0: return "color: #2ecc71; font-weight: bold;"
+                        if val < 0: return "color: #e74c3c; font-weight: bold;"
+                        return "color: #95a5a6;"
+                    
+                    if not sim_df.empty:
+                        styled_sim = sim_df.style.format(format_sim).map(color_pnl, subset=["UNREALIZED_PNL", "PNL_%"])
+                    else:
+                        styled_sim = sim_df.style.format(format_sim)
+                        
                     st.dataframe(styled_sim, use_container_width=True, hide_index=True)
             else:
                 st.warning("⚠️ No stocks passed the strict FlexGate logic today.")
