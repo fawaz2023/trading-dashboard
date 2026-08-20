@@ -258,39 +258,15 @@ if page == "Dashboard":
                                 colors = [get_color(c) for c in sector_df['COUNT']]
 
                                 # --- BUILD THE CHART ---
-                                fig = go.Figure()
-
-                                # 1. THE STEMS (Thick, visible lines)
-                                fig.add_trace(go.Bar(
+                                fig = go.Figure(go.Bar(
                                     x=sector_df['COUNT'],
                                     y=sector_df['SECTOR'],
                                     orientation='h',
-                                    marker=dict(
-                                        color=colors, 
-                                        line=dict(width=0) # No border on the bar itself
-                                    ),
-                                    width=0.05, # This makes the thick bar act like a thick stem
-                                    hoverinfo='skip'
-                                ))
-
-                                # 2. THE DOTS AND LABELS (Heavy, bold, glowing)
-                                fig.add_trace(go.Scatter(
-                                    x=sector_df['COUNT'],
-                                    y=sector_df['SECTOR'],
-                                    mode='markers+text',
-                                    marker=dict(
-                                        size=18, # Much larger dots
-                                        color=colors,
-                                        line=dict(color='#FFFFFF', width=2), # White border for pop
-                                        symbol='circle'
-                                    ),
+                                    marker=dict(color=colors, line=dict(width=0)),
+                                    width=0.6, # Thick, authoritative bars
                                     text=sector_df['COUNT'],
-                                    textposition='middle right',
-                                    textfont=dict(
-                                        color='#FFFFFF', # Pure white text
-                                        size=16,         # Larger text
-                                        family='Inter, sans-serif'
-                                    ),
+                                    textposition='outside',
+                                    textfont=dict(color='#FFFFFF', size=16, family='Inter, sans-serif'),
                                     hovertemplate='<b>%{y}</b><br>Signals: %{x}<extra></extra>'
                                 ))
 
@@ -301,7 +277,7 @@ if page == "Dashboard":
                                     plot_bgcolor='rgba(0,0,0,0)',
                                     showlegend=False,
                                     xaxis=dict(
-                                        visible=False, # Hide X-axis numbers, the dots have the numbers
+                                        visible=False, # Hide X-axis completely
                                         showgrid=False,
                                         zeroline=False
                                     ),
@@ -317,7 +293,7 @@ if page == "Dashboard":
                                     height=380
                                 )
 
-                                # Add total signals as a sleek subtitle annotation since donut is gone
+                                # Add total signals as a sleek subtitle annotation
                                 fig.add_annotation(
                                     text=f"TOTAL SIGNALS: <b style='color:#ffffff; font-size: 16px;'>{total_signals}</b>",
                                     x=0.01, y=1.15,
