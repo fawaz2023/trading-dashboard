@@ -249,35 +249,58 @@ if page == "Dashboard":
                                 
                                 sector_df = df_viz.groupby('SECTOR').size().reset_index(name='COUNT').sort_values('COUNT', ascending=True)
                                 total_signals = len(df_viz)
-                                                       # --- COLOR LOGIC ---
-                                def get_color(count):
-                                    if count >= 6: return '#F50057'  # Magenta for highest
-                                    elif count >= 4: return '#FFB300' # Amber for mid
-                                    else: return '#00E5FF'           # Cyan for lowest
+                                # --- COLOR LOGIC: Neon, Dark Base, and Glow (RGBA) ---
+                                def get_colors(count):
+                                    if count >= 6:
+                                        return '#F50057', '#800033', 'rgba(245, 0, 87, 0.25)'  # Magenta
+                                    elif count >= 4:
+                                        return '#FFB300', '#805400', 'rgba(255, 179, 0, 0.25)' # Amber
+                                    else:
+                                        return '#00E5FF', '#006B7A', 'rgba(0, 229, 255, 0.25)' # Cyan
 
-                                colors = [get_color(c) for c in sector_df['COUNT']]
+                                # --- BUILD THE NEON TUBE CHART ---
+                                fig = go.Figure()
 
-                                # --- BUILD THE CHART ---
-                                fig = go.Figure(go.Bar(
-                                    x=sector_df['COUNT'],
-                                    y=sector_df['SECTOR'],
-                                    orientation='h',
-                                    marker=dict(color=colors, line=dict(width=0)),
-                                    width=0.6, # Thick, authoritative bars
-                                    text=sector_df['COUNT'],
-                                    textposition='outside',
-                                    textfont=dict(color='#FFFFFF', size=16, family='Inter, sans-serif'),
-                                    hovertemplate='<b>%{y}</b><br>Signals: %{x}<extra></extra>'
-                                ))
+                                for index, row in sector_df.iterrows():
+                                    neon, dark, glow = get_colors(row['COUNT'])
+                                    
+                                    # Layer 1: The Glow / Halation (semi-transparent, wider)
+                                    fig.add_trace(go.Bar(
+                                        x=[row['COUNT']],
+                                        y=[row['SECTOR']],
+                                        orientation='h',
+                                        marker=dict(color=glow, line=dict(width=0)),
+                                        width=0.85,
+                                        hoverinfo='skip',
+                                        showlegend=False
+                                    ))
+                                    
+                                    # Layer 2: The Main Gradient Bar
+                                    fig.add_trace(go.Bar(
+                                        x=[row['COUNT']],
+                                        y=[row['SECTOR']],
+                                        orientation='h',
+                                        marker=dict(
+                                            color=dark,
+                                            gradient=dict(type='horizontal', color=neon),
+                                            line=dict(color='rgba(255,255,255,0.1)', width=1)
+                                        ),
+                                        width=0.55,
+                                        text=[row['COUNT']],
+                                        textposition='outside',
+                                        textfont=dict(color='#FFFFFF', size=16, family='Inter, sans-serif'),
+                                        hovertemplate=f'<b>{row["SECTOR"]}</b><br>Signals: {row["COUNT"]}<extra></extra>',
+                                        showlegend=False
+                                    ))
 
                                 # 3. LAYOUT & ZERO-CHROME
                                 fig.update_layout(
                                     margin=dict(t=40, l=120, r=40, b=20),
                                     paper_bgcolor='rgba(0,0,0,0)',
                                     plot_bgcolor='rgba(0,0,0,0)',
-                                    showlegend=False,
+                                    barmode='overlay', # CRITICAL: stack the glow and the core
                                     xaxis=dict(
-                                        visible=False, # Hide X-axis completely
+                                        visible=False,
                                         showgrid=False,
                                         zeroline=False
                                     ),
@@ -285,9 +308,9 @@ if page == "Dashboard":
                                         showgrid=False,
                                         zeroline=False,
                                         tickfont=dict(
-                                            color='#FFFFFF', # Pure white sector names
-                                            size=14,
-                                            family='Inter, sans-serif'
+                                            color='#FFFFFF',
+                                            size=15,
+                                            family='Arial Black, Inter, sans-serif'
                                         )
                                     ),
                                     height=380
