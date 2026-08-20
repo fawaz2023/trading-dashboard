@@ -638,11 +638,19 @@ try:
     result = subprocess.run(["python", "calculate_active_signals.py"],
                              timeout=300, capture_output=True, text=True)
     if result.returncode == 0:
-        print("Institutional metrics calculated successfully")
+        print("Legacy Institutional metrics calculated successfully")
     else:
-        print(f"Institutional metrics had errors (non-critical): {result.stderr[:200]}")
+        print(f"Legacy Institutional metrics had errors: {result.stderr[:200]}")
+        
+    print("Running FlexGate 2.0 ML Engine...")
+    result2 = subprocess.run(["python", "flexgate_2_scanner.py"],
+                             timeout=300, capture_output=True, text=True)
+    if result2.returncode == 0:
+        print("FlexGate 2.0 metrics calculated successfully")
+    else:
+        print(f"FlexGate 2.0 metrics had errors: {result2.stderr[:200]}")
 except Exception as e:
-    print(f"Institutional metrics failed (non-critical): {e}")
+    print(f"Metrics calculations failed (non-critical): {e}")
 
 import sys
 sys.exit(0)
