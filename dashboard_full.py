@@ -950,6 +950,73 @@ elif page == "SBIA Institutional Engine":
                     styled_flex = df_flex[avail_cols].style.format(format_dict)
                     
                 st.dataframe(styled_flex, use_container_width=True, hide_index=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- SBIA FLEXGATE ₹10L SIMULATION ---
+                st.markdown("""
+                <div style='background: linear-gradient(135deg, rgba(142, 162, 255, 0.1), rgba(11, 124, 255, 0.05)); border: 1px solid rgba(142, 162, 255, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+                    <h3 style='margin-top: 0; color: #8ea2ff; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>💰</span> ₹10L FlexGate Simulation</h3>
+                    <p style='margin-bottom: 0; opacity: 0.9;'>Capital allocation based on a ₹1,000,000 base, risking exactly 1.5% (₹15,000) per trade based on the <strong>Chandelier Exit</strong> distance.</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                capital = 1000000.0
+                risk_per_trade = capital * 0.015 # 15000
+                
+                sim_records = []
+                total_invested = 0.0
+                
+                for idx, row in df_flex.iterrows():
+                    sym = row['SYMBOL']
+                    entry = row['CLOSE']
+                    sl = row.get('CHANDELIER_EXIT', pd.NA)
+                    
+                    if pd.isna(entry) or pd.isna(sl) or entry <= sl:
+                        # Fallback if SL is invalid or missing
+                        invested = capital * 0.10
+                        shares = invested / entry if entry > 0 else 0
+                    else:
+                        sl_dist = entry - sl
+                        shares = risk_per_trade / sl_dist
+                        invested = shares * entry
+                        
+                        # Cap max investment at 10% of equity
+                        if invested > capital * 0.10:
+                            invested = capital * 0.10
+                            shares = invested / entry
+                            
+                    total_invested += invested
+                        
+                    sim_records.append({
+                        "DATE": row["DATE"],
+                        "SYMBOL": sym,
+                        "STATUS": "ACTIVE",
+                        "INVESTED": invested,
+                        "ENTRY_PRICE": entry,
+                        "CHANDELIER_EXIT": sl,
+                        "SHARES": shares
+                    })
+                    
+                sim_df = pd.DataFrame(sim_records)
+                
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Total Capital", f"₹{capital:,.0f}")
+                c2.metric("Total Allocated", f"₹{total_invested:,.0f}", f"{(total_invested / capital) * 100:.1f}% Deployed")
+                c3.metric("Available Cash", f"₹{(capital - total_invested):,.0f}")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                with st.expander("📊 View Current Portfolio Allocation"):
+                    format_sim = {
+                        "INVESTED": "₹{:,.0f}",
+                        "ENTRY_PRICE": "₹{:.2f}",
+                        "CHANDELIER_EXIT": "₹{:.2f}",
+                        "SHARES": "{:,.0f}"
+                    }
+                    
+                    styled_sim = sim_df.style.format(format_sim)
+                    st.dataframe(styled_sim, use_container_width=True, hide_index=True)
             else:
                 st.warning("⚠️ No stocks passed the strict FlexGate logic today.")
         else:
