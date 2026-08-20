@@ -171,9 +171,11 @@ def update_sbia_ledger(alpha_watchlist, latest_prices_df, ledger_path="data/sbia
             
             # If we didn't hit SL or TP along the path, check momentum loss
             if (sym, entry_dt) not in watchlist_keys:
-                ledger_df.at[idx, 'STATUS'] = 'MOMENTUM_LOST'
-                ledger_df.at[idx, 'EXIT_DATE'] = latest_date
-                ledger_df.at[idx, 'EXIT_PRICE'] = path_df['Close'].iloc[-1] if data is not None and len(path_df) > 0 else row['ENTRY_PRICE']
+                days_held = (latest_date - entry_dt).days
+                if days_held >= 10:
+                    ledger_df.at[idx, 'STATUS'] = 'MOMENTUM_LOST'
+                    ledger_df.at[idx, 'EXIT_DATE'] = latest_date
+                    ledger_df.at[idx, 'EXIT_PRICE'] = path_df['Close'].iloc[-1] if data is not None and len(path_df) > 0 else row['ENTRY_PRICE']
                 
     # 5. Filter alpha_watchlist
     active_ledger = ledger_df[ledger_df['STATUS'] == 'ACTIVE'].copy()

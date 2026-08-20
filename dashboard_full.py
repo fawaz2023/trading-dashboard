@@ -855,8 +855,8 @@ elif page == "SBIA Institutional Engine":
                                     "STATUS": status,
                                     "INVESTED": invested,
                                     "CURR_VALUE": current_value,
-                                    "REALIZED_PNL": r_pnl if status != 'ACTIVE' else np.nan,
-                                    "UNREALIZED_PNL": u_pnl if status == 'ACTIVE' else np.nan,
+                                    "REALIZED_PNL": r_pnl,
+                                    "UNREALIZED_PNL": u_pnl,
                                     "TOTAL_PNL": r_pnl + u_pnl,
                                     "PNL_%": ((r_pnl + u_pnl) / invested * 100) if invested > 0 else 0
                                 })
