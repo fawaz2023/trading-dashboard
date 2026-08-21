@@ -1565,15 +1565,17 @@ elif page == "Watchlist":
                 # Re-map columns for better readability if they exist
                 col_rename = {
                     "symbol": "Symbol",
-                    "entry_price": "Entry Price",
-                    "exit_price": "Exit Price",
                     "entry_date": "Entry Date",
+                    "entry_price": "Entry Price",
                     "exit_date": "Exit Date",
+                    "exit_price": "Exit Price",
                     "return_pct": "Return %",
                     "reason": "Reason"
                 }
                 
-                closed_display = closed_df.rename(columns=col_rename)
+                # Keep only these specific columns to hide garbage 'days_held' or 'exit_reason' columns
+                cols_to_keep = [c for c in col_rename.keys() if c in closed_df.columns]
+                closed_display = closed_df[cols_to_keep].rename(columns=col_rename)
                 
                 st.dataframe(
                     closed_display.style.format({
