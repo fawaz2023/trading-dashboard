@@ -124,7 +124,19 @@ st.markdown('''<style>
     /* 1. KILL DEFAULT STREAMLIT UI */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    
+    /* Make the top header transparent so the sidebar toggle button (>>/<<) still works! */
+    header {
+        background-color: transparent !important;
+    }
+    header:hover {
+        background-color: rgba(0, 229, 255, 0.05) !important;
+    }
+    
+    /* Hide the ugly 'Running...' status dots but keep the sidebar button */
+    [data-testid="stStatusWidget"] {
+        display: none !important;
+    }
     
     /* 2. DARK GLASSMORPHISM SIDEBAR */
     section[data-testid="stSidebar"] {
