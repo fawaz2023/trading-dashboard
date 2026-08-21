@@ -121,6 +121,52 @@ st.markdown('''<style>
     /* Success box hover */
     .stSuccess:hover { transform: scale(1.02); box-shadow: 0 4px 15px rgba(72,187,120,0.2); transition: all 0.3s ease; }
     
+    /* 1. KILL DEFAULT STREAMLIT UI */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* 2. DARK GLASSMORPHISM SIDEBAR */
+    section[data-testid="stSidebar"] {
+        background-color: #0A0C12;
+        border-right: 1px solid rgba(255,255,255,0.05);
+    }
+    section[data-testid="stSidebar"] .stRadio > label {
+        font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #5f6b7c;
+        font-family: 'Inter', sans-serif; font-weight: 600;
+    }
+    
+    /* 3. CUSTOM NAVIGATION BUTTONS */
+    section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label {
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        padding: 10px 12px;
+        transition: all 0.2s ease;
+        margin-bottom: 5px;
+        color: #8b9bb4;
+        font-weight: 500;
+    }
+    section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label:hover {
+        background-color: rgba(255,255,255,0.03);
+        color: #ffffff;
+        border-color: rgba(255,255,255,0.1);
+    }
+    section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label[data-checked="true"] {
+        background-color: rgba(0, 229, 255, 0.05) !important;
+        border-left: 3px solid #00E5FF !important;
+        border-radius: 0 8px 8px 0;
+        color: #00E5FF !important;
+        font-weight: 700;
+    }
+    
+    /* 4. PREMIUM WATCHLIST TABLE STYLING */
+    .stDataFrame {
+        background: rgba(20, 25, 40, 0.4);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 12px;
+        padding: 10px;
+    }
 </style>''', unsafe_allow_html=True)
 
 def log_signal_to_history(symbol, exchange, close, deliv_per, momentum_score):
