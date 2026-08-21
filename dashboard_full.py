@@ -172,12 +172,42 @@ st.markdown('''<style>
         font-weight: 700;
     }
     
-    /* 4. PREMIUM WATCHLIST TABLE STYLING */
+    /* 5. DENSE, PREMIUM DATA TABLE STYLING */
     .stDataFrame {
-        background: rgba(20, 25, 40, 0.4);
-        border: 1px solid rgba(255,255,255,0.07);
-        border-radius: 12px;
-        padding: 10px;
+        background: rgba(20, 25, 40, 0.4) !important;
+        border: 1px solid rgba(255,255,255,0.07) !important;
+        border-radius: 12px !important;
+        padding: 0px 15px !important; /* Remove inner padding so table spans width */
+    }
+    /* Style Table Headers */
+    .stDataFrame th {
+        background-color: transparent !important;
+        color: #8b9bb4 !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        font-size: 11px !important;
+        letter-spacing: 1px !important;
+        border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+    }
+    /* Style Table Data Rows */
+    .stDataFrame td {
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 600 !important;
+        color: #e0e6ed !important;
+        font-size: 14px !important;
+        border-bottom: 1px solid rgba(255,255,255,0.03) !important;
+        padding-top: 14px !important; /* Dense rows */
+        padding-bottom: 14px !important;
+    }
+    /* Neon Cyan Checkboxes */
+    .stDataFrame input[type="checkbox"] {
+        accent-color: #00E5FF !important;
+        cursor: pointer;
+    }
+    /* Remove default streamlit button hover grey */
+    .stDataFrame tr:hover {
+        background-color: rgba(0, 229, 255, 0.03) !important;
     }
 </style>''', unsafe_allow_html=True)
 
@@ -1403,12 +1433,34 @@ elif page == "Watchlist":
                 disabled=["symbol", "entry_price", "current_price", "tp", "sl", "entry_date", "PnL_%"]
             )
             
-            # Inline Close Position Logic
+            # --- INLINE CLOSE POSITION LOGIC & FOOTER ---
             selected_to_close = edited_df[edited_df["Select to Close"] == True]
             
-            col_btn, col_info = st.columns([1, 2])
+            # Calculate Total Portfolio PnL
+            total_pnl = display_df['PnL_%'].sum()
+            pnl_color = "#00E5FF" if total_pnl >= 0 else "#F50057"
+        
+            # Create a 2-column footer layout
+            col_metrics, col_btn = st.columns([2, 1])
+            
+            with col_metrics:
+                st.markdown(f"""
+                <div style="background: rgba(20, 25, 40, 0.4); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 15px 20px; height: 100%; display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <div style="font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px;">Total Open PnL</div>
+                        <div style="font-size: 24px; font-weight: 800; color: {pnl_color};">{total_pnl:.2f}%</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px;">Active Positions</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #fff;">{len(display_df)}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        
             with col_btn:
-                if st.button("🔴 Close Selected Positions", type="primary", use_container_width=True):
+                # Add margin top to align with the card
+                st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+                if st.button("🔴 Close Selected", type="primary", use_container_width=True):
                     if not selected_to_close.empty:
                         for symbol, exit_price in zip(selected_to_close['symbol'], selected_to_close['current_price']):
                             success = wm.close_position(symbol, exit_price, "manual")
@@ -1416,7 +1468,7 @@ elif page == "Watchlist":
                                 st.toast(f"Closed position for {symbol}", icon="✅")
                         st.rerun()
                     else:
-                        st.warning("No positions selected to close.")
+                        st.warning("Select a position to close.")
             
             st.divider()
             st.markdown("<div class='subsection'>Export Data</div>", unsafe_allow_html=True)
