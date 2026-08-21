@@ -209,6 +209,57 @@ st.markdown('''<style>
     .stDataFrame tr:hover {
         background-color: rgba(0, 229, 255, 0.03) !important;
     }
+    /* 6. PREMIUM SEARCH BAR (Command Line Style) */
+    div[data-baseweb="select"] > div {
+        background-color: rgba(255, 255, 255, 0.03) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+        transition: all 0.2s ease;
+    }
+    div[data-baseweb="select"] > div:hover {
+        border: 1px solid rgba(0, 229, 255, 0.5) !important;
+        background-color: rgba(0, 229, 255, 0.05) !important;
+    }
+    div[data-baseweb="select"] > div > div {
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 600 !important;
+        color: #FFFFFF !important;
+        font-size: 16px !important;
+    }
+    /* Style the dropdown options when opened */
+    ul[data-baseweb="menu"] {
+        background-color: #0e1117 !important;
+        border: 1px solid rgba(0, 229, 255, 0.2) !important;
+        border-radius: 8px !important;
+    }
+    li[data-baseweb="option"] {
+        color: #e0e6ed !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+    li[data-baseweb="option"]:hover {
+        background-color: rgba(0, 229, 255, 0.1) !important;
+        color: #FFFFFF !important;
+    }
+
+    /* 7. FIX THE PRIMARY BUTTON (Terminal Magenta) */
+    .stButton > button[kind="primary"] {
+        background-color: #F50057 !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.5px !important;
+        text-transform: uppercase !important;
+        transition: all 0.2s ease !important;
+        box-shadow: 0 0 15px rgba(245, 0, 87, 0.3) !important; /* Magenta glow */
+    }
+    .stButton > button[kind="primary"]:hover {
+        background-color: #FF1A6B !important;
+        box-shadow: 0 0 25px rgba(245, 0, 87, 0.6) !important;
+        transform: translateY(-1px) !important;
+    }
 </style>''', unsafe_allow_html=True)
 
 def log_signal_to_history(symbol, exchange, close, deliv_per, momentum_score):
@@ -1261,7 +1312,7 @@ elif page == "Verify Conditions":
 
 # WATCHLIST
 elif page == "Watchlist":
-    st.markdown("<div class='section'>Active Watchlist</div>", unsafe_allow_html=True)
+    st.markdown('<div class="terminal-header" style="font-size: 24px; border-left: 4px solid #00E5FF; margin-bottom: 20px;">Active Watchlist</div>', unsafe_allow_html=True)
     try:
         from watchlist_manager import WatchlistManager
         wm = WatchlistManager()
@@ -1311,7 +1362,7 @@ elif page == "Watchlist":
         master_df, universe_df = load_scanner_universe()
 
         # --- 2. WATCHLIST SEARCH UI ---
-        st.markdown('<div class="subsection" style="margin-top: 0;">Add Scanner Stock to Watchlist</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size: 13px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 10px;">Add Scanner Stock to Watchlist</div>', unsafe_allow_html=True)
         
         if not universe_df.empty:
             col1, col2 = st.columns([3, 1])
@@ -1394,7 +1445,7 @@ elif page == "Watchlist":
                 wm.auto_update_prices(df)
                 wm = WatchlistManager()  # Reload after update
             
-            st.markdown('<div class="terminal-header">Manage Positions</div>', unsafe_allow_html=True)
+            st.markdown('<div class="terminal-header" style="font-size: 16px; border-left: 4px solid #FFB300; margin-top: 30px; margin-bottom: 15px;">Manage Positions</div>', unsafe_allow_html=True)
             
             display_cols = ["symbol", "entry_price", "current_price", "tp", "sl", "entry_date"]
             display_df = wm.active[display_cols].copy()
