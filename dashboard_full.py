@@ -924,18 +924,20 @@ elif page == "SBIA Institutional Engine":
                             st.markdown("""
                             <div style='background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(39, 174, 96, 0.05)); border: 1px solid rgba(46, 204, 113, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
                                 <h3 style='margin-top: 0; color: #2ecc71; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>💰</span> ₹10L Velocity Simulation</h3>
-                                <p style='margin-bottom: 0; opacity: 0.9;'>Tracking total Realized and Unrealized PnL assuming a ₹1,000,000 base capital, risking exactly 0.1% (₹1,000) per trade based on the exact Stop Loss distance on entry day.</p>
+                                <p style='margin-bottom: 0; opacity: 0.9;'>Tracking total Realized and Unrealized PnL assuming a ₹1,000,000 base capital, risking exactly 0.3% (₹3,000) per trade based on the exact Stop Loss distance on entry day.</p>
                             </div>
                             """, unsafe_allow_html=True)
                             
                             capital = 1000000.0
-                            risk_per_trade = capital * 0.001 # 1000
+                            risk_per_trade = capital * 0.003 # 3000
                             
                             sim_records = []
                             total_realized = 0.0
                             total_unrealized = 0.0
                             wins = 0
                             losses = 0
+                            total_allocated = 0.0
+                            active_trades_count = 0
                             
                             # Load latest market prices for accurate Unrealized PnL
                             latest_prices = {}
@@ -987,6 +989,8 @@ elif page == "SBIA Institutional Engine":
                                     u_pnl = shares * (current_px - entry)
                                     total_unrealized += u_pnl
                                     current_value = invested + u_pnl
+                                    total_allocated += invested
+                                    active_trades_count += 1
                                     
                                 sim_records.append({
                                     "DATE": row["ENTRY_DATE"],
@@ -1007,11 +1011,17 @@ elif page == "SBIA Institutional Engine":
                             win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
                             current_equity = capital + total_realized + total_unrealized
                             
-                            c1, c2, c3, c4 = st.columns(4)
+                            c1, c2, c3 = st.columns(3)
                             c1.metric("Current Portfolio Value", f"₹{current_equity:,.0f}", f"{((current_equity - capital) / capital) * 100:+.2f}%")
                             c2.metric("Total Realized PnL", f"₹{total_realized:,.0f}")
                             c3.metric("Running Unrealized PnL", f"₹{total_unrealized:,.0f}")
-                            c4.metric("Strategy Win Rate", f"{win_rate:.1f}%", f"{wins}W / {losses}L")
+                            
+                            st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+                            
+                            c4, c5, c6 = st.columns(3)
+                            c4.metric("Total Allocated", f"₹{total_allocated:,.0f}", f"{(total_allocated / capital) * 100:.1f}% Deployed")
+                            c5.metric("Active Trades", f"{active_trades_count}")
+                            c6.metric("Strategy Win Rate", f"{win_rate:.1f}%", f"{wins}W / {losses}L")
                             
                             st.markdown("<br>", unsafe_allow_html=True)
                             
@@ -1111,6 +1121,7 @@ elif page == "SBIA Institutional Engine":
                 sim_records = []
                 total_invested = 0.0
                 total_unrealized = 0.0
+                active_trades_count = 0
                 
                 # Load latest market prices for accurate Unrealized PnL
                 latest_prices = {}
@@ -1154,6 +1165,7 @@ elif page == "SBIA Institutional Engine":
                         shares = invested / entry if entry > 0 else 0
                             
                     total_invested += invested
+                    active_trades_count += 1
                     
                     curr_px = latest_prices.get(sym, entry)
                     u_pnl = shares * (curr_px - entry)
@@ -1174,10 +1186,11 @@ elif page == "SBIA Institutional Engine":
                     
                 sim_df = pd.DataFrame(sim_records)
                 
-                c1, c2, c3 = st.columns(3)
+                c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Total Capital", f"₹{capital:,.0f}")
                 c2.metric("Total Allocated", f"₹{total_invested:,.0f}", f"{(total_invested / capital) * 100:.1f}% Deployed")
-                c3.metric("Running Unrealized PnL", f"₹{total_unrealized:,.0f}", f"{(total_unrealized / total_invested) * 100 if total_invested > 0 else 0:+.2f}%")
+                c3.metric("Active Trades", f"{active_trades_count}")
+                c4.metric("Running Unrealized PnL", f"₹{total_unrealized:,.0f}", f"{(total_unrealized / total_invested) * 100 if total_invested > 0 else 0:+.2f}%")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
@@ -1260,6 +1273,114 @@ elif page == "SBIA Institutional Engine":
                     styled_flex2 = df_flex2[avail_cols_f2].style.format(format_dict_f2)
                     
                 st.dataframe(styled_flex2, use_container_width=True, hide_index=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- FLEXGATE 2.0 ML ENGINE ₹10L SIMULATION ---
+                st.markdown("""
+                <div style='background: linear-gradient(135deg, rgba(231, 76, 60, 0.1), rgba(192, 57, 43, 0.05)); border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
+                    <h3 style='margin-top: 0; color: #e74c3c; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>💰</span> ₹10L ML Engine Simulation</h3>
+                    <p style='margin-bottom: 0; opacity: 0.9;'>Capital allocation based on a ₹1,000,000 base, risking exactly 0.2% (₹2,000) per trade based on the <strong>Chandelier Exit</strong> distance.</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                capital_f2 = 1000000.0
+                risk_per_trade_f2 = capital_f2 * 0.002 # 2000
+                
+                sim_records_f2 = []
+                total_invested_f2 = 0.0
+                total_unrealized_f2 = 0.0
+                active_trades_count_f2 = 0
+                
+                # Load latest market prices for accurate Unrealized PnL
+                latest_prices_f2 = {}
+                if os.path.exists("data/dashboard_cloud.csv"):
+                    try:
+                        live_df2 = pd.read_csv("data/dashboard_cloud.csv", usecols=["SYMBOL", "CLOSE"])
+                        latest_prices_f2 = live_df2.drop_duplicates(subset=["SYMBOL"]).set_index("SYMBOL")["CLOSE"].to_dict()
+                    except Exception:
+                        pass
+                
+                for idx, row in df_flex2.iterrows():
+                    # Only simulate trades for AI APPROVED signals
+                    if row.get('AI_APPROVED', False) == False:
+                        continue
+                        
+                    # Stop allocating if we are out of cash
+                    if total_invested_f2 >= capital_f2:
+                        continue
+                        
+                    sym = row['SYMBOL']
+                    entry = row['CLOSE'] # This is the historical close (entry)
+                    sl = row.get('CHANDELIER_EXIT', pd.NA)
+                    
+                    if pd.isna(entry) or pd.isna(sl) or entry <= sl:
+                        # Fallback if SL is invalid or missing
+                        invested = capital_f2 * 0.10
+                        shares = invested / entry if entry > 0 else 0
+                    else:
+                        sl_dist = entry - sl
+                        shares = risk_per_trade_f2 / sl_dist
+                        invested = shares * entry
+                        
+                        # Cap max investment at 10% of equity
+                        if invested > capital_f2 * 0.10:
+                            invested = capital_f2 * 0.10
+                            shares = invested / entry
+                            
+                    total_invested_f2 += invested
+                    active_trades_count_f2 += 1
+                    
+                    curr_px = latest_prices_f2.get(sym, entry)
+                    u_pnl = shares * (curr_px - entry)
+                    total_unrealized_f2 += u_pnl
+                    
+                    sim_records_f2.append({
+                        "DATE": row.get("DATE", ""),
+                        "SYMBOL": sym,
+                        "INVESTED": invested,
+                        "ENTRY_PRICE": entry,
+                        "CURRENT_PRICE": curr_px,
+                        "UNREALIZED_PNL": u_pnl,
+                        "PNL_%": (u_pnl / invested * 100) if invested > 0 else 0,
+                        "CHANDELIER_EXIT": sl,
+                        "SHARES": shares
+                    })
+                    
+                sim_df_f2 = pd.DataFrame(sim_records_f2)
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Total Capital", f"₹{capital_f2:,.0f}")
+                c2.metric("Total Allocated", f"₹{total_invested_f2:,.0f}", f"{(total_invested_f2 / capital_f2) * 100:.1f}% Deployed")
+                c3.metric("Active Trades", f"{active_trades_count_f2}")
+                c4.metric("Running Unrealized PnL", f"₹{total_unrealized_f2:,.0f}", f"{(total_unrealized_f2 / total_invested_f2) * 100 if total_invested_f2 > 0 else 0:+.2f}%")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                with st.expander("📊 View Current Portfolio Allocation"):
+                    format_sim_f2 = {
+                        "INVESTED": "₹{:,.0f}",
+                        "ENTRY_PRICE": "₹{:.2f}",
+                        "CURRENT_PRICE": "₹{:.2f}",
+                        "UNREALIZED_PNL": "₹{:,.0f}",
+                        "PNL_%": "{:+.1f}%",
+                        "CHANDELIER_EXIT": "₹{:.2f}",
+                        "SHARES": "{:,.0f}"
+                    }
+                    
+                    def color_pnl2(val):
+                        if pd.isna(val): return ""
+                        if val > 0: return "color: #2ecc71; font-weight: bold;"
+                        if val < 0: return "color: #e74c3c; font-weight: bold;"
+                        return "color: #95a5a6;"
+                    
+                    if not sim_df_f2.empty:
+                        st.dataframe(
+                            sim_df_f2.style.format(format_sim_f2).map(color_pnl2, subset=["UNREALIZED_PNL", "PNL_%"]),
+                            use_container_width=True, hide_index=True
+                        )
+                    else:
+                        st.info("No approved trades to simulate.")
             else:
                 st.warning("⚠️ No stocks passed the strict FlexGate 2.0 ML logic today.")
         else:
