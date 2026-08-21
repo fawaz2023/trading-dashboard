@@ -214,8 +214,8 @@ def process_flexgate_engine(df, current_date):
         flexgate_pool["AI_WIN_PROBABILITY"] = flexgate_pool["AI_WIN_PROBABILITY"].fillna(0)
         
         # ML Gate >= 60%
-        flexgate_final = flexgate_pool[sanity_mask & (flexgate_pool["AI_WIN_PROBABILITY"] >= 60.0)].copy()
-        flexgate_final["AI_APPROVED"] = True
+        flexgate_final = flexgate_pool[sanity_mask].copy()
+        flexgate_final["AI_APPROVED"] = flexgate_final["AI_WIN_PROBABILITY"] >= 60.0
     else:
         print(f"WARNING: {model_path} missing! FlexGate 2.0 running without AI.")
         flexgate_final = flexgate_pool[sanity_mask].copy()

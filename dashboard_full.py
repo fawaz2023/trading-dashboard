@@ -918,9 +918,9 @@ elif page == "SBIA Institutional Engine":
                 
                 # --- 1. VELOCITY SIMULATION STATUS BAR (Moved to Top) ---
                 st.markdown('<div style="font-size: 13px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 10px;">₹10L Velocity Simulation Status</div>', unsafe_allow_html=True)
-\n                capital = 1000000.0
+                capital = 1000000.0
                 risk_per_trade = capital * 0.003 # 3000
-\n                sim_records = []
+                sim_records = []
                 total_realized = 0.0
                 total_unrealized = 0.0
                 wins = 0
@@ -929,7 +929,7 @@ elif page == "SBIA Institutional Engine":
                 active_trades_count = 0
                 current_equity = capital
                 win_rate = 0.0
-\n                import os
+                import os
                 import pandas as pd
                 if os.path.exists("data/sbia_ledger.csv"):
                     try:
@@ -942,12 +942,12 @@ elif page == "SBIA Institutional Engine":
                                     latest_prices = live_df.drop_duplicates(subset=["SYMBOL"]).set_index("SYMBOL")["CLOSE"].to_dict()
                                 except Exception:
                                     pass
-\n                            for idx, row in ledger_full.iterrows():
+                            for idx, row in ledger_full.iterrows():
                                 sym = row['SYMBOL']
                                 entry = row['ENTRY_PRICE']
                                 sl = row['STOP_LOSS']
                                 status = row['STATUS']
-\n                                if pd.isna(entry) or pd.isna(sl) or entry <= sl:
+                                if pd.isna(entry) or pd.isna(sl) or entry <= sl:
                                     invested = capital * 0.10
                                     shares = invested / entry if entry > 0 else 0
                                 else:
@@ -957,16 +957,16 @@ elif page == "SBIA Institutional Engine":
                                     if invested > capital * 0.10:
                                         invested = capital * 0.10
                                         shares = invested / entry
-\n                                r_pnl = 0.0
+                                r_pnl = 0.0
                                 u_pnl = 0.0
                                 current_value = invested
-\n                                if status != 'ACTIVE':
+                                if status != 'ACTIVE':
                                     exit_px = row.get('EXIT_PRICE', entry)
                                     if pd.isna(exit_px): exit_px = entry
                                     r_pnl = shares * (exit_px - entry)
                                     total_realized += r_pnl
                                     current_value = invested + r_pnl
-\n                                    if status in ['HIT_TP', 'MOMENTUM_LOST'] and r_pnl > 0: wins += 1
+                                    if status in ['HIT_TP', 'MOMENTUM_LOST'] and r_pnl > 0: wins += 1
                                     elif status == 'HIT_SL' or r_pnl < 0: losses += 1
                                 else:
                                     current_px = latest_prices.get(sym, entry)
@@ -975,7 +975,7 @@ elif page == "SBIA Institutional Engine":
                                     current_value = invested + u_pnl
                                     total_allocated += invested
                                     active_trades_count += 1
-\n                                sim_records.append({
+                                sim_records.append({
                                     "DATE": row["ENTRY_DATE"],
                                     "SYMBOL": sym,
                                     "STATUS": status,
@@ -986,13 +986,13 @@ elif page == "SBIA Institutional Engine":
                                     "TOTAL_PNL": r_pnl + u_pnl,
                                     "PNL_%": ((r_pnl + u_pnl) / invested * 100) if invested > 0 else 0
                                 })
-\n                            total_trades = wins + losses
+                            total_trades = wins + losses
                             win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
                             current_equity = capital + total_realized + total_unrealized
                     except Exception:
                         pass
-\n                col_health, col_exposure, col_efficiency = st.columns(3)
-\n                with col_health:
+                col_health, col_exposure, col_efficiency = st.columns(3)
+                with col_health:
                     st.markdown(f"""
                     <div class="fintech-card" style="padding: 15px 20px;">
                         <div style="font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Portfolio Health</div>
@@ -1008,7 +1008,7 @@ elif page == "SBIA Institutional Engine":
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-\n                with col_exposure:
+                with col_exposure:
                     st.markdown(f"""
                     <div class="fintech-card" style="padding: 15px 20px;">
                         <div style="font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Live Exposure</div>
@@ -1024,7 +1024,7 @@ elif page == "SBIA Institutional Engine":
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-\n                with col_efficiency:
+                with col_efficiency:
                     st.markdown(f"""
                     <div class="fintech-card" style="padding: 15px 20px;">
                         <div style="font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">System Efficiency</div>
@@ -1040,8 +1040,8 @@ elif page == "SBIA Institutional Engine":
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-\n                st.write("") # Spacer
-\n                if os.path.exists("data/sbia_ledger.csv"):
+                st.write("") # Spacer
+                if os.path.exists("data/sbia_ledger.csv"):
                     try:
                         ledger_full = pd.read_csv("data/sbia_ledger.csv")
                         if len(ledger_full) > 0:
