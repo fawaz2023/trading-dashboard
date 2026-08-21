@@ -1548,6 +1548,47 @@ elif page == "Watchlist":
         else:
             st.info("📭 No active positions - Add signals from Dashboard")
             
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown('<div class="terminal-header" style="font-size: 16px; border-left: 4px solid #6c5ce7; margin-top: 30px; margin-bottom: 15px;">Past Closed Trades</div>', unsafe_allow_html=True)
+        
+        if os.path.exists(wm.closed_file):
+            closed_df = pd.read_csv(wm.closed_file)
+            if not closed_df.empty:
+                if 'exit_date' in closed_df.columns:
+                    closed_df = closed_df.sort_values(by='exit_date', ascending=False)
+                
+                def color_closed_pnl(val):
+                    if pd.isna(val): return ""
+                    color = '#00E5FF' if float(val) >= 0 else '#F50057'
+                    return f'color: {color}; font-weight: bold'
+                
+                # Re-map columns for better readability if they exist
+                col_rename = {
+                    "symbol": "Symbol",
+                    "entry_price": "Entry Price",
+                    "exit_price": "Exit Price",
+                    "entry_date": "Entry Date",
+                    "exit_date": "Exit Date",
+                    "return_pct": "Return %",
+                    "reason": "Reason"
+                }
+                
+                closed_display = closed_df.rename(columns=col_rename)
+                
+                st.dataframe(
+                    closed_display.style.format({
+                        "Entry Price": "₹{:.2f}",
+                        "Exit Price": "₹{:.2f}",
+                        "Return %": "{:+.2f}%"
+                    }).map(color_closed_pnl, subset=['Return %']),
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.info("No closed trades recorded yet.")
+        else:
+            st.info("No closed trades recorded yet.")
+            
     except Exception as e:
         st.error(f"Error: {str(e)}")
         st.exception(e)
