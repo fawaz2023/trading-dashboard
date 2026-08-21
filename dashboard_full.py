@@ -1352,7 +1352,7 @@ elif page == "Watchlist":
                 wm.auto_update_prices(df)
                 wm = WatchlistManager()  # Reload after update
             
-            st.markdown("<div class='subsection'>Manage Positions</div>", unsafe_allow_html=True)
+            st.markdown('<div class="terminal-header">Manage Positions</div>', unsafe_allow_html=True)
             
             display_cols = ["symbol", "entry_price", "current_price", "tp", "sl", "entry_date"]
             display_df = wm.active[display_cols].copy()
@@ -1360,72 +1360,51 @@ elif page == "Watchlist":
             # Add PnL % Column
             display_df['PnL_%'] = ((display_df['current_price'] - display_df['entry_price']) / display_df['entry_price']) * 100
             
-            def color_pnl(val):
-                if pd.isna(val): return ""
-                color = '#00E5FF' if val >= 0 else '#F50057'
-                return f'color: {color}; font-weight: bold'
-
-            format_dict = {
-                "entry_price": "₹{:.2f}",
-                "current_price": "₹{:.2f}",
-                "tp": "₹{:.2f}",
-                "sl": "₹{:.2f}",
-                "PnL_%": "{:+.2f}%"
-            }
-
-            st.dataframe(
-                display_df.style.format(format_dict).map(color_pnl, subset=['PnL_%']),
-                use_container_width=True, 
-                hide_index=True
-            )
-        
-            # Delete section with explicit stock selection
-            st.markdown("<div class='subsection'>Close Position (Record Trade)</div>", unsafe_allow_html=True)
+            # Add checkbox column
+            display_df['Select to Close'] = False
             
-            # Create a unique list of stocks
-            stock_list = wm.active["symbol"].unique().tolist()
-            
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                # Store selection in session state
-                if "close_stock_idx" not in st.session_state:
-                    st.session_state.close_stock_idx = 0
-                
-                selected_idx = st.selectbox(
-                    "Select stock to close",
-                    range(len(stock_list)),
-                    format_func=lambda x: f"{stock_list[x]} - Entry: ₹{wm.active[wm.active['symbol']==stock_list[x]]['entry_price'].values[0]:.2f}",
-                    key="close_selector"
+            # Configure columns
+            column_config = {
+                "symbol": "Symbol",
+                "entry_price": st.column_config.NumberColumn("Entry Price", format="₹%.2f"),
+                "current_price": st.column_config.NumberColumn("Current Price", format="₹%.2f"),
+                "tp": st.column_config.NumberColumn("Target", format="₹%.2f"),
+                "sl": st.column_config.NumberColumn("Stop Loss", format="₹%.2f"),
+                "entry_date": "Entry Date",
+                "PnL_%": st.column_config.NumberColumn(
+                    "PnL %",
+                    format="%.2f%%"
+                ),
+                "Select to Close": st.column_config.CheckboxColumn(
+                    "Select to Close",
+                    default=False,
+                    help="Check this box and click 'Close Selected Positions' below"
                 )
-                selected_stock = stock_list[selected_idx]
-                
-            with col2:
-                exit_price = st.number_input("Exit Price", value=0.0, min_value=0.0, key="exit_input")
+            }
             
-            col3, col4, col5 = st.columns([1, 1, 2])
-            with col3:
-                if st.button("✅ Close & Record", key="close_btn", type="primary"):
-                    if exit_price > 0:
-                        success = wm.close_position(selected_stock, exit_price, "manual")
-                        if success:
-                            st.success(f"✅ Closed {selected_stock} at ₹{exit_price}")
-                            st.info("👉 Refresh page to see updated list")
-                        else:
-                            st.error("Failed to close position")
+            # Render Data Editor
+            edited_df = st.data_editor(
+                display_df,
+                column_config=column_config,
+                use_container_width=True,
+                hide_index=True,
+                disabled=["symbol", "entry_price", "current_price", "tp", "sl", "entry_date", "PnL_%"]
+            )
+            
+            # Inline Close Position Logic
+            selected_to_close = edited_df[edited_df["Select to Close"] == True]
+            
+            col_btn, col_info = st.columns([1, 2])
+            with col_btn:
+                if st.button("🔴 Close Selected Positions", type="primary", use_container_width=True):
+                    if not selected_to_close.empty:
+                        for symbol, exit_price in zip(selected_to_close['symbol'], selected_to_close['current_price']):
+                            success = wm.close_position(symbol, exit_price, "manual")
+                            if success:
+                                st.toast(f"Closed position for {symbol}", icon="✅")
+                        st.rerun()
                     else:
-                        st.error("⚠️ Enter exit price > 0")
-            
-            with col4:
-                if st.button("🗑️ Remove Only", key="delete_btn", type="secondary"):
-                    success = wm.delete_stock(selected_stock)
-                    if success:
-                        st.warning(f"🗑️ Removed {selected_stock} (not recorded)")
-                        st.info("👉 Refresh page")
-                    else:
-                        st.error("Failed to remove")
-            
-            with col5:
-                st.caption("Close = Record trade | Remove = Delete without tracking")
+                        st.warning("No positions selected to close.")
             
             st.divider()
             st.markdown("<div class='subsection'>Export Data</div>", unsafe_allow_html=True)
