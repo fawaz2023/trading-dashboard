@@ -25,7 +25,7 @@ class WatchlistManager:
             return False
         return symbol in self.active["symbol"].values
     
-    def add_stock(self, symbol, entry_price, delivery_pct, momentum):
+    def add_stock(self, symbol, entry_price, delivery_pct, momentum, strategy="Unknown"):
         if self.stock_exists(symbol):
             return False, f"{symbol} already exists"
         
@@ -35,6 +35,7 @@ class WatchlistManager:
             "entry_date": [datetime.now().strftime("%Y-%m-%d")],
             "delivery_pct": [delivery_pct],
             "momentum": [momentum],
+            "strategy": [strategy],
             "current_price": [entry_price],
             "tp": [round(entry_price * 1.12, 2)],
             "sl": [round(entry_price * 0.85, 2)],
@@ -67,6 +68,7 @@ class WatchlistManager:
                 "entry_date": row_data["entry_date"],
                 "exit_date": datetime.now().strftime("%Y-%m-%d"),
                 "return_pct": round(pct_return, 2),
+                "strategy": row_data.get("strategy", "Unknown"),
                 "reason": reason
             }])
             

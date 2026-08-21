@@ -1422,11 +1422,13 @@ elif page == "Watchlist":
                     submitted = st.form_submit_button("➕ Add to Active Watchlist", type="primary")
                     
                     if submitted:
+                        scanner_name = universe_df[universe_df['SYMBOL'] == selected_symbol]['SCANNER_NAME'].values[0]
                         success, msg = wm.add_stock(
                             symbol=selected_symbol,
                             entry_price=entry_price,
                             delivery_pct=stock_data.get('DELIV_PER', 0),
-                            momentum=0
+                            momentum=0,
+                            strategy=scanner_name
                         )
                         if success:
                             st.success(f"{selected_symbol} added to Watchlist! Tracking PnL active.")
@@ -1448,7 +1450,12 @@ elif page == "Watchlist":
             st.markdown('<div class="terminal-header" style="font-size: 16px; border-left: 4px solid #FFB300; margin-top: 30px; margin-bottom: 15px;">Manage Positions</div>', unsafe_allow_html=True)
             
             display_cols = ["symbol", "entry_price", "current_price", "tp", "sl", "entry_date"]
+            if "strategy" in wm.active.columns:
+                display_cols.insert(1, "strategy")
+                
             display_df = wm.active[display_cols].copy()
+            if "strategy" in display_df.columns:
+                display_df["strategy"] = display_df["strategy"].fillna("12-Condition Scanner")
             
             # Add PnL % Column
             display_df['PnL_%'] = ((display_df['current_price'] - display_df['entry_price']) / display_df['entry_price']) * 100
@@ -1459,6 +1466,7 @@ elif page == "Watchlist":
             # Configure columns
             column_config = {
                 "symbol": "Symbol",
+                "strategy": "Strategy",
                 "entry_price": st.column_config.NumberColumn("Entry Price", format="₹%.2f"),
                 "current_price": st.column_config.NumberColumn("Current Price", format="₹%.2f"),
                 "tp": st.column_config.NumberColumn("Target", format="₹%.2f"),
@@ -1481,7 +1489,7 @@ elif page == "Watchlist":
                 column_config=column_config,
                 use_container_width=True,
                 hide_index=True,
-                disabled=["symbol", "entry_price", "current_price", "tp", "sl", "entry_date", "PnL_%"]
+                disabled=["symbol", "strategy", "entry_price", "current_price", "tp", "sl", "entry_date", "PnL_%"]
             )
             
             # --- INLINE CLOSE POSITION LOGIC & FOOTER ---
@@ -1565,6 +1573,7 @@ elif page == "Watchlist":
                 # Re-map columns for better readability if they exist
                 col_rename = {
                     "symbol": "Symbol",
+                    "strategy": "Strategy",
                     "entry_date": "Entry Date",
                     "entry_price": "Entry Price",
                     "exit_date": "Exit Date",
