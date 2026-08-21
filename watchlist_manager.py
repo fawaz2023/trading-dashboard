@@ -17,6 +17,8 @@ class WatchlistManager:
                 df["status"] = "active"
             if "current_price" not in df.columns:
                 df["current_price"] = df["entry_price"].copy()
+            if "strategy" not in df.columns:
+                df["strategy"] = "12-Condition Scanner"
             return df
         return pd.DataFrame()
     
