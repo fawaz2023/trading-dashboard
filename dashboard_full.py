@@ -9,6 +9,163 @@ from config import Config
 
 st.set_page_config(page_title="Trading Dashboard", layout="wide")
 
+def render_velocity_simulation(ledger_csv, title="₹10L Velocity Simulation Status", risk_pct=0.003):
+    st.markdown(f'<div style="font-size: 13px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 10px;">{title}</div>', unsafe_allow_html=True)
+    capital = 1000000.0
+    risk_per_trade = capital * risk_pct
+    sim_records = []
+    total_realized = 0.0
+    total_unrealized = 0.0
+    wins = 0
+    losses = 0
+    total_allocated = 0.0
+    active_trades_count = 0
+    current_equity = capital
+    win_rate = 0.0
+    import os
+    import pandas as pd
+    if os.path.exists(ledger_csv):
+        try:
+            ledger_full = pd.read_csv(ledger_csv)
+            if len(ledger_full) > 0:
+                latest_prices = {}
+                if os.path.exists("data/dashboard_cloud.csv"):
+                    try:
+                        live_df = pd.read_csv("data/dashboard_cloud.csv", usecols=["SYMBOL", "CLOSE"])
+                        latest_prices = live_df.drop_duplicates(subset=["SYMBOL"]).set_index("SYMBOL")["CLOSE"].to_dict()
+                    except Exception:
+                        pass
+                for idx, row in ledger_full.iterrows():
+                    sym = row['SYMBOL']
+                    entry = row['ENTRY_PRICE']
+                    sl = row['STOP_LOSS']
+                    status = row['STATUS']
+                    if pd.isna(entry) or pd.isna(sl) or entry <= sl:
+                        invested = capital * 0.10
+                        shares = invested / entry if entry > 0 else 0
+                    else:
+                        sl_dist = entry - sl
+                        shares = risk_per_trade / sl_dist
+                        invested = shares * entry
+                        if invested > capital * 0.10:
+                            invested = capital * 0.10
+                            shares = invested / entry
+                    r_pnl = 0.0
+                    u_pnl = 0.0
+                    current_value = invested
+                    if status != 'ACTIVE':
+                        exit_px = row.get('EXIT_PRICE', entry)
+                        if pd.isna(exit_px): exit_px = entry
+                        r_pnl = shares * (exit_px - entry)
+                        total_realized += r_pnl
+                        current_value = invested + r_pnl
+                        if status in ['HIT_TP', 'MOMENTUM_LOST'] and r_pnl > 0: wins += 1
+                        elif status == 'HIT_SL' or r_pnl < 0: losses += 1
+                    else:
+                        current_px = latest_prices.get(sym, entry)
+                        u_pnl = shares * (current_px - entry)
+                        total_unrealized += u_pnl
+                        current_value = invested + u_pnl
+                        total_allocated += invested
+                        active_trades_count += 1
+                    sim_records.append({
+                        "DATE": row["ENTRY_DATE"],
+                        "SYMBOL": sym,
+                        "STATUS": status,
+                        "INVESTED": invested,
+                        "CURR_VALUE": current_value,
+                        "REALIZED_PNL": r_pnl,
+                        "UNREALIZED_PNL": u_pnl,
+                        "TOTAL_PNL": r_pnl + u_pnl,
+                        "PNL_%": ((r_pnl + u_pnl) / invested * 100) if invested > 0 else 0
+                    })
+                total_trades = wins + losses
+                win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
+                current_equity = capital + total_realized + total_unrealized
+        except Exception:
+            pass
+
+    col_health, col_exposure, col_efficiency = st.columns(3)
+    with col_health:
+        st.markdown(f'''
+        <div class="fintech-card" style="padding: 18px 22px; border-top: 2px solid #00E5FF;">
+            <div style="font-size: 12px; color: #00E5FF; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; margin-bottom: 12px; text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);">Portfolio Health</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <div style="font-size: 12px; color: #e0e6ed; font-weight: 600; margin-bottom: 4px;">Current Value</div>
+                    <div style="font-size: 26px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;">₹{current_equity:,.0f}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 12px; color: #e0e6ed; font-weight: 600; margin-bottom: 4px;">Realized PnL</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #00E5FF;">{'+' if total_realized >= 0 else ''}₹{total_realized:,.0f}</div>
+                </div>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+        
+    with col_exposure:
+        st.markdown(f'''
+        <div class="fintech-card" style="padding: 18px 22px; border-top: 2px solid #FFB300;">
+            <div style="font-size: 12px; color: #FFB300; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; margin-bottom: 12px; text-shadow: 0 0 10px rgba(255, 179, 0, 0.4);">Live Exposure</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <div style="font-size: 12px; color: #e0e6ed; font-weight: 600; margin-bottom: 4px;">Active Trades</div>
+                    <div style="font-size: 26px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;">{active_trades_count}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 12px; color: #e0e6ed; font-weight: 600; margin-bottom: 4px;">Allocated Cap</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #FFB300;">₹{total_allocated:,.0f}</div>
+                </div>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    with col_efficiency:
+        st.markdown(f'''
+        <div class="fintech-card" style="padding: 18px 22px; border-top: 2px solid #F50057;">
+            <div style="font-size: 12px; color: #F50057; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; margin-bottom: 12px; text-shadow: 0 0 10px rgba(245, 0, 87, 0.4);">System Efficiency</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <div style="font-size: 12px; color: #e0e6ed; font-weight: 600; margin-bottom: 4px;">Strategy Win Rate</div>
+                    <div style="font-size: 26px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;">{win_rate:.1f}%</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 12px; color: #e0e6ed; font-weight: 600; margin-bottom: 4px;">Unrealized MTM</div>
+                    <div style="font-size: 20px; font-weight: 800; color: {'#00E5FF' if total_unrealized >= 0 else '#F50057'};">{'+' if total_unrealized >= 0 else ''}₹{total_unrealized:,.0f}</div>
+                </div>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    if sim_records:
+        sim_df = pd.DataFrame(sim_records)
+        sim_df = sim_df.sort_values(by="DATE", ascending=False)
+        with st.expander("📝 View Trade-by-Trade Simulation Ledger", expanded=False):
+            def color_status(val):
+                if val == 'ACTIVE': return "color: #f1c40f; font-weight: bold;"
+                elif val == 'HIT_TP': return "color: #2ecc71; font-weight: bold;"
+                elif val == 'HIT_SL': return "color: #e74c3c; font-weight: bold;"
+                return "color: #95a5a6;"
+                
+            format_sim = {
+                "INVESTED": "₹{:,.0f}",
+                "CURR_VALUE": "₹{:,.0f}",
+                "REALIZED_PNL": "₹{:,.0f}",
+                "UNREALIZED_PNL": "₹{:,.0f}",
+                "TOTAL_PNL": "₹{:,.0f}",
+                "PNL_%": "{:+.1f}%"
+            }
+            
+            def color_pnl(val):
+                if pd.isna(val): return ""
+                if val > 0: return "color: #2ecc71; font-weight: bold;"
+                if val < 0: return "color: #e74c3c; font-weight: bold;"
+                return "color: #95a5a6;"
+                
+            styled_sim = sim_df.style.format(format_sim).map(color_pnl, subset=["REALIZED_PNL", "UNREALIZED_PNL", "TOTAL_PNL", "PNL_%"]).map(color_status, subset=["STATUS"])
+            st.dataframe(styled_sim, use_container_width=True, hide_index=True)
+
+
 @st.cache_data(ttl=3600)
 def load_live_data(filepath, file_mtime=0):
     if os.path.exists(filepath):
@@ -916,161 +1073,7 @@ elif page == "SBIA Institutional Engine":
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- 1. VELOCITY SIMULATION STATUS BAR (Moved to Top) ---
-                st.markdown('<div style="font-size: 13px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 10px;">₹10L Velocity Simulation Status</div>', unsafe_allow_html=True)
-                capital = 1000000.0
-                risk_per_trade = capital * 0.003 # 3000
-                sim_records = []
-                total_realized = 0.0
-                total_unrealized = 0.0
-                wins = 0
-                losses = 0
-                total_allocated = 0.0
-                active_trades_count = 0
-                current_equity = capital
-                win_rate = 0.0
-                import os
-                import pandas as pd
-                if os.path.exists("data/sbia_ledger.csv"):
-                    try:
-                        ledger_full = pd.read_csv("data/sbia_ledger.csv")
-                        if len(ledger_full) > 0:
-                            latest_prices = {}
-                            if os.path.exists("data/dashboard_cloud.csv"):
-                                try:
-                                    live_df = pd.read_csv("data/dashboard_cloud.csv", usecols=["SYMBOL", "CLOSE"])
-                                    latest_prices = live_df.drop_duplicates(subset=["SYMBOL"]).set_index("SYMBOL")["CLOSE"].to_dict()
-                                except Exception:
-                                    pass
-                            for idx, row in ledger_full.iterrows():
-                                sym = row['SYMBOL']
-                                entry = row['ENTRY_PRICE']
-                                sl = row['STOP_LOSS']
-                                status = row['STATUS']
-                                if pd.isna(entry) or pd.isna(sl) or entry <= sl:
-                                    invested = capital * 0.10
-                                    shares = invested / entry if entry > 0 else 0
-                                else:
-                                    sl_dist = entry - sl
-                                    shares = risk_per_trade / sl_dist
-                                    invested = shares * entry
-                                    if invested > capital * 0.10:
-                                        invested = capital * 0.10
-                                        shares = invested / entry
-                                r_pnl = 0.0
-                                u_pnl = 0.0
-                                current_value = invested
-                                if status != 'ACTIVE':
-                                    exit_px = row.get('EXIT_PRICE', entry)
-                                    if pd.isna(exit_px): exit_px = entry
-                                    r_pnl = shares * (exit_px - entry)
-                                    total_realized += r_pnl
-                                    current_value = invested + r_pnl
-                                    if status in ['HIT_TP', 'MOMENTUM_LOST'] and r_pnl > 0: wins += 1
-                                    elif status == 'HIT_SL' or r_pnl < 0: losses += 1
-                                else:
-                                    current_px = latest_prices.get(sym, entry)
-                                    u_pnl = shares * (current_px - entry)
-                                    total_unrealized += u_pnl
-                                    current_value = invested + u_pnl
-                                    total_allocated += invested
-                                    active_trades_count += 1
-                                sim_records.append({
-                                    "DATE": row["ENTRY_DATE"],
-                                    "SYMBOL": sym,
-                                    "STATUS": status,
-                                    "INVESTED": invested,
-                                    "CURR_VALUE": current_value,
-                                    "REALIZED_PNL": r_pnl,
-                                    "UNREALIZED_PNL": u_pnl,
-                                    "TOTAL_PNL": r_pnl + u_pnl,
-                                    "PNL_%": ((r_pnl + u_pnl) / invested * 100) if invested > 0 else 0
-                                })
-                            total_trades = wins + losses
-                            win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
-                            current_equity = capital + total_realized + total_unrealized
-                    except Exception:
-                        pass
-                col_health, col_exposure, col_efficiency = st.columns(3)
-                with col_health:
-                    st.markdown(f"""
-                    <div class="fintech-card" style="padding: 15px 20px;">
-                        <div style="font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Portfolio Health</div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                            <div>
-                                <div style="font-size: 10px; color: #5f6b7c;">Current Value</div>
-                                <div style="font-size: 22px; font-weight: 800; color: #FFFFFF;">₹{current_equity:,.0f}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 10px; color: #5f6b7c;">Realized PnL</div>
-                                <div style="font-size: 18px; font-weight: 700; color: #00E5FF;">{'+' if total_realized >= 0 else ''}₹{total_realized:,.0f}</div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with col_exposure:
-                    st.markdown(f"""
-                    <div class="fintech-card" style="padding: 15px 20px;">
-                        <div style="font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Live Exposure</div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                            <div>
-                                <div style="font-size: 10px; color: #5f6b7c;">Active Trades</div>
-                                <div style="font-size: 22px; font-weight: 800; color: #FFB300;">{active_trades_count}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 10px; color: #5f6b7c;">Unrealized PnL</div>
-                                <div style="font-size: 18px; font-weight: 700; color: #F50057;">{'+' if total_unrealized >= 0 else ''}₹{total_unrealized:,.0f}</div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with col_efficiency:
-                    st.markdown(f"""
-                    <div class="fintech-card" style="padding: 15px 20px;">
-                        <div style="font-size: 11px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">System Efficiency</div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                            <div>
-                                <div style="font-size: 10px; color: #5f6b7c;">Strategy Win Rate</div>
-                                <div style="font-size: 22px; font-weight: 800; color: #FFFFFF;">{win_rate:.1f}%</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 10px; color: #5f6b7c;">Max Drawdown</div>
-                                <div style="font-size: 18px; font-weight: 700; color: #8b9bb4;">N/A</div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                st.write("") # Spacer
-                if os.path.exists("data/sbia_ledger.csv"):
-                    try:
-                        ledger_full = pd.read_csv("data/sbia_ledger.csv")
-                        if len(ledger_full) > 0:
-                            sim_df = pd.DataFrame(sim_records)
-                            sim_df = sim_df.sort_values(by="DATE", ascending=False)
-                            
-                            with st.expander("📊 View Trade-by-Trade Simulation Ledger"):
-                                sim_df["DATE"] = pd.to_datetime(sim_df["DATE"], errors="coerce").dt.strftime("%d %b %Y")
-                                
-                                format_sim = {
-                                    "INVESTED": "₹{:,.0f}",
-                                    "CURR_VALUE": "₹{:,.0f}",
-                                    "REALIZED_PNL": "₹{:,.0f}",
-                                    "UNREALIZED_PNL": "₹{:,.0f}",
-                                    "TOTAL_PNL": "₹{:,.0f}",
-                                    "PNL_%": "{:+.1f}%"
-                                }
-                                
-                                def color_pnl(val):
-                                    if pd.isna(val): return ""
-                                    if val > 0: return "color: #2ecc71; font-weight: bold;"
-                                    if val < 0: return "color: #e74c3c; font-weight: bold;"
-                                    return "color: #95a5a6;"
-                                    
-                                styled_sim = sim_df.style.format(format_sim).map(color_pnl, subset=["REALIZED_PNL", "UNREALIZED_PNL", "TOTAL_PNL", "PNL_%"]).map(color_status, subset=["STATUS"])
-                                st.dataframe(styled_sim, use_container_width=True, hide_index=True)
-                                
-                    except Exception as e:
-                        st.error(f"Error loading simulation: {e}")
+                render_velocity_simulation('data/sbia_ledger.csv', risk_pct=0.003)
             else:
                 st.warning("⚠️ No stocks passed the Path A ML Gate today.")
         else:
@@ -1084,6 +1087,7 @@ elif page == "SBIA Institutional Engine":
         </div>
         """, unsafe_allow_html=True)
         
+
         FLEXGATE_FILE = "data/sbia_flexgate_watchlist.csv"
         if os.path.exists(FLEXGATE_FILE):
             try:
@@ -1128,122 +1132,12 @@ elif page == "SBIA Institutional Engine":
                     
                 st.dataframe(styled_flex, use_container_width=True, hide_index=True)
                 
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # --- SBIA FLEXGATE ₹10L SIMULATION ---
-                st.markdown("""
-                <div style='background: linear-gradient(135deg, rgba(142, 162, 255, 0.1), rgba(11, 124, 255, 0.05)); border: 1px solid rgba(142, 162, 255, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
-                    <h3 style='margin-top: 0; color: #8ea2ff; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>💰</span> ₹10L FlexGate Simulation</h3>
-                    <p style='margin-bottom: 0; opacity: 0.9;'>Capital allocation based on a ₹1,000,000 base, risking exactly 0.2% (₹2,000) per trade based on the <strong>Chandelier Exit</strong> distance.</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                capital = 1000000.0
-                risk_per_trade = capital * 0.002 # 2000
-                
-                sim_records = []
-                total_invested = 0.0
-                total_unrealized = 0.0
-                active_trades_count = 0
-                
-                # Load latest market prices for accurate Unrealized PnL
-                latest_prices = {}
-                if os.path.exists("data/dashboard_cloud.csv"):
-                    try:
-                        live_df = pd.read_csv("data/dashboard_cloud.csv", usecols=["SYMBOL", "CLOSE"])
-                        latest_prices = live_df.drop_duplicates(subset=["SYMBOL"]).set_index("SYMBOL")["CLOSE"].to_dict()
-                    except Exception:
-                        pass
-                
-                for idx, row in df_flex.iterrows():
-                    # Only simulate trades for AI APPROVED signals
-                    if row.get('AI_APPROVED', False) == False:
-                        continue
-                        
-                    # Stop allocating if we are out of cash
-                    if total_invested >= capital:
-                        continue
-                        
-                    sym = row['SYMBOL']
-                    entry = row['CLOSE'] # This is the historical close (entry)
-                    sl = row.get('CHANDELIER_EXIT', pd.NA)
-                    
-                    if pd.isna(entry) or pd.isna(sl) or entry <= sl:
-                        # Fallback if SL is invalid or missing
-                        invested = capital * 0.10
-                        shares = invested / entry if entry > 0 else 0
-                    else:
-                        sl_dist = entry - sl
-                        shares = risk_per_trade / sl_dist
-                        invested = shares * entry
-                        
-                        # Cap max investment at 10% of equity
-                        if invested > capital * 0.10:
-                            invested = capital * 0.10
-                            shares = invested / entry
-                            
-                    # Hard cap so we don't exceed remaining capital
-                    if total_invested + invested > capital:
-                        invested = capital - total_invested
-                        shares = invested / entry if entry > 0 else 0
-                            
-                    total_invested += invested
-                    active_trades_count += 1
-                    
-                    curr_px = latest_prices.get(sym, entry)
-                    u_pnl = shares * (curr_px - entry)
-                    total_unrealized += u_pnl
-                        
-                    sim_records.append({
-                        "DATE": row["DATE"],
-                        "SYMBOL": sym,
-                        "STATUS": "ACTIVE",
-                        "INVESTED": invested,
-                        "ENTRY_PRICE": entry,
-                        "CURRENT_PRICE": curr_px,
-                        "UNREALIZED_PNL": u_pnl,
-                        "PNL_%": (u_pnl / invested * 100) if invested > 0 else 0,
-                        "CHANDELIER_EXIT": sl,
-                        "SHARES": shares
-                    })
-                    
-                sim_df = pd.DataFrame(sim_records)
-                
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Total Capital", f"₹{capital:,.0f}")
-                c2.metric("Total Allocated", f"₹{total_invested:,.0f}", f"{(total_invested / capital) * 100:.1f}% Deployed")
-                c3.metric("Active Trades", f"{active_trades_count}")
-                c4.metric("Running Unrealized PnL", f"₹{total_unrealized:,.0f}", f"{(total_unrealized / total_invested) * 100 if total_invested > 0 else 0:+.2f}%")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                with st.expander("📊 View Current Portfolio Allocation"):
-                    format_sim = {
-                        "INVESTED": "₹{:,.0f}",
-                        "ENTRY_PRICE": "₹{:.2f}",
-                        "CURRENT_PRICE": "₹{:.2f}",
-                        "UNREALIZED_PNL": "₹{:,.0f}",
-                        "PNL_%": "{:+.1f}%",
-                        "CHANDELIER_EXIT": "₹{:.2f}",
-                        "SHARES": "{:,.0f}"
-                    }
-                    
-                    def color_pnl(val):
-                        if pd.isna(val): return ""
-                        if val > 0: return "color: #2ecc71; font-weight: bold;"
-                        if val < 0: return "color: #e74c3c; font-weight: bold;"
-                        return "color: #95a5a6;"
-                    
-                    if not sim_df.empty:
-                        styled_sim = sim_df.style.format(format_sim).map(color_pnl, subset=["UNREALIZED_PNL", "PNL_%"])
-                    else:
-                        styled_sim = sim_df.style.format(format_sim)
-                        
-                    st.dataframe(styled_sim, use_container_width=True, hide_index=True)
             else:
                 st.warning("⚠️ No stocks passed the strict FlexGate logic today.")
         else:
             st.warning("Run calculate_active_signals.py to generate the FlexGate Watchlist.")
+        st.markdown('<br><br>', unsafe_allow_html=True)
+        render_velocity_simulation('data/flexgate_ledger.csv', title='₹10L FlexGate Simulation Status', risk_pct=0.002)
             
     with tab4:
         st.markdown("""
@@ -1253,6 +1147,7 @@ elif page == "SBIA Institutional Engine":
         </div>
         """, unsafe_allow_html=True)
         
+
         FLEXGATE2_FILE = "data/sbia_flexgate2_watchlist.csv"
         if os.path.exists(FLEXGATE2_FILE):
             try:
@@ -1297,117 +1192,12 @@ elif page == "SBIA Institutional Engine":
                     
                 st.dataframe(styled_flex2, use_container_width=True, hide_index=True)
                 
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # --- FLEXGATE 2.0 ML ENGINE ₹10L SIMULATION ---
-                st.markdown("""
-                <div style='background: linear-gradient(135deg, rgba(231, 76, 60, 0.1), rgba(192, 57, 43, 0.05)); border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 12px; padding: 20px; margin-bottom: 20px;'>
-                    <h3 style='margin-top: 0; color: #e74c3c; display: flex; align-items: center;'><span style='font-size: 1.5rem; margin-right: 10px;'>💰</span> ₹10L ML Engine Simulation</h3>
-                    <p style='margin-bottom: 0; opacity: 0.9;'>Capital allocation based on a ₹1,000,000 base, risking exactly 0.2% (₹2,000) per trade based on the <strong>Chandelier Exit</strong> distance.</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                capital_f2 = 1000000.0
-                risk_per_trade_f2 = capital_f2 * 0.002 # 2000
-                
-                sim_records_f2 = []
-                total_invested_f2 = 0.0
-                total_unrealized_f2 = 0.0
-                active_trades_count_f2 = 0
-                
-                # Load latest market prices for accurate Unrealized PnL
-                latest_prices_f2 = {}
-                if os.path.exists("data/dashboard_cloud.csv"):
-                    try:
-                        live_df2 = pd.read_csv("data/dashboard_cloud.csv", usecols=["SYMBOL", "CLOSE"])
-                        latest_prices_f2 = live_df2.drop_duplicates(subset=["SYMBOL"]).set_index("SYMBOL")["CLOSE"].to_dict()
-                    except Exception:
-                        pass
-                
-                for idx, row in df_flex2.iterrows():
-                    # Only simulate trades for AI APPROVED signals
-                    if row.get('AI_APPROVED', False) == False:
-                        continue
-                        
-                    # Stop allocating if we are out of cash
-                    if total_invested_f2 >= capital_f2:
-                        continue
-                        
-                    sym = row['SYMBOL']
-                    entry = row['CLOSE'] # This is the historical close (entry)
-                    sl = row.get('CHANDELIER_EXIT', pd.NA)
-                    
-                    if pd.isna(entry) or pd.isna(sl) or entry <= sl:
-                        # Fallback if SL is invalid or missing
-                        invested = capital_f2 * 0.10
-                        shares = invested / entry if entry > 0 else 0
-                    else:
-                        sl_dist = entry - sl
-                        shares = risk_per_trade_f2 / sl_dist
-                        invested = shares * entry
-                        
-                        # Cap max investment at 10% of equity
-                        if invested > capital_f2 * 0.10:
-                            invested = capital_f2 * 0.10
-                            shares = invested / entry
-                            
-                    total_invested_f2 += invested
-                    active_trades_count_f2 += 1
-                    
-                    curr_px = latest_prices_f2.get(sym, entry)
-                    u_pnl = shares * (curr_px - entry)
-                    total_unrealized_f2 += u_pnl
-                    
-                    sim_records_f2.append({
-                        "DATE": row.get("DATE", ""),
-                        "SYMBOL": sym,
-                        "INVESTED": invested,
-                        "ENTRY_PRICE": entry,
-                        "CURRENT_PRICE": curr_px,
-                        "UNREALIZED_PNL": u_pnl,
-                        "PNL_%": (u_pnl / invested * 100) if invested > 0 else 0,
-                        "CHANDELIER_EXIT": sl,
-                        "SHARES": shares
-                    })
-                    
-                sim_df_f2 = pd.DataFrame(sim_records_f2)
-                
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Total Capital", f"₹{capital_f2:,.0f}")
-                c2.metric("Total Allocated", f"₹{total_invested_f2:,.0f}", f"{(total_invested_f2 / capital_f2) * 100:.1f}% Deployed")
-                c3.metric("Active Trades", f"{active_trades_count_f2}")
-                c4.metric("Running Unrealized PnL", f"₹{total_unrealized_f2:,.0f}", f"{(total_unrealized_f2 / total_invested_f2) * 100 if total_invested_f2 > 0 else 0:+.2f}%")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                with st.expander("📊 View Current Portfolio Allocation"):
-                    format_sim_f2 = {
-                        "INVESTED": "₹{:,.0f}",
-                        "ENTRY_PRICE": "₹{:.2f}",
-                        "CURRENT_PRICE": "₹{:.2f}",
-                        "UNREALIZED_PNL": "₹{:,.0f}",
-                        "PNL_%": "{:+.1f}%",
-                        "CHANDELIER_EXIT": "₹{:.2f}",
-                        "SHARES": "{:,.0f}"
-                    }
-                    
-                    def color_pnl2(val):
-                        if pd.isna(val): return ""
-                        if val > 0: return "color: #2ecc71; font-weight: bold;"
-                        if val < 0: return "color: #e74c3c; font-weight: bold;"
-                        return "color: #95a5a6;"
-                    
-                    if not sim_df_f2.empty:
-                        st.dataframe(
-                            sim_df_f2.style.format(format_sim_f2).map(color_pnl2, subset=["UNREALIZED_PNL", "PNL_%"]),
-                            use_container_width=True, hide_index=True
-                        )
-                    else:
-                        st.info("No approved trades to simulate.")
             else:
                 st.warning("⚠️ No stocks passed the strict FlexGate 2.0 ML logic today.")
         else:
             st.warning("Run flexgate_2_scanner.py to generate the FlexGate 2.0 Watchlist.")
+        st.markdown('<br><br>', unsafe_allow_html=True)
+        render_velocity_simulation('data/flexgate2_ledger.csv', title='₹10L FlexGate 2.0 Simulation Status', risk_pct=0.002)
 
 # VERIFY CONDITIONS
 elif page == "Verify Conditions":

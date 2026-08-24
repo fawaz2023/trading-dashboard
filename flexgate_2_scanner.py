@@ -240,9 +240,14 @@ def process_flexgate_engine(df, current_date):
         flexgate_final = flexgate_final.drop_duplicates(subset=["DATE", "SYMBOL", "EXCHANGE"], keep="last")
         flexgate_final = flexgate_final.sort_values(by=["DATE", "AI_WIN_PROBABILITY"], ascending=[False, False])
         
-    flexgate_final.to_csv(FLEXGATE_FILE, index=False)
-    print(f"Path B Output: {len(flexgate_final)} signals currently active in {FLEXGATE_FILE}")
-    return flexgate_final
+    # Integrate FlexGate Ledger to track SL simulation
+    from ledger_manager import update_flexgate_ledger
+    print("Updating FlexGate 2.0 Trade Ledger and applying SL filters...")
+    flexgate_active, flexgate_ledger_full = update_flexgate_ledger(flexgate_final, df, ledger_path="data/flexgate2_ledger.csv")
+    
+    flexgate_active.to_csv(FLEXGATE_FILE, index=False)
+    print(f"Path B Output: {len(flexgate_active)} signals currently active in {FLEXGATE_FILE}")
+    return flexgate_active
 
 
 def run_scoring():
