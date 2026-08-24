@@ -9,7 +9,7 @@ from config import Config
 
 st.set_page_config(page_title="Trading Dashboard", layout="wide")
 
-def render_velocity_simulation(ledger_csv, title="₹10L Velocity Simulation Status", risk_pct=0.003):
+def render_velocity_simulation(ledger_csv, title="₹10L Velocity Simulation Status", risk_pct=0.003, ai_threshold=None):
     st.markdown(f'<div style="font-size: 13px; color: #8b9bb4; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 10px;">{title}</div>', unsafe_allow_html=True)
     capital = 1000000.0
     risk_per_trade = capital * risk_pct
@@ -27,6 +27,8 @@ def render_velocity_simulation(ledger_csv, title="₹10L Velocity Simulation Sta
     if os.path.exists(ledger_csv):
         try:
             ledger_full = pd.read_csv(ledger_csv)
+            if ai_threshold is not None and "ENTRY_AI_PROB" in ledger_full.columns:
+                ledger_full = ledger_full[ledger_full["ENTRY_AI_PROB"] >= ai_threshold]
             if len(ledger_full) > 0:
                 latest_prices = {}
                 if os.path.exists("data/dashboard_cloud.csv"):
@@ -1137,7 +1139,7 @@ elif page == "SBIA Institutional Engine":
         else:
             st.warning("Run calculate_active_signals.py to generate the FlexGate Watchlist.")
         st.markdown('<br><br>', unsafe_allow_html=True)
-        render_velocity_simulation('data/flexgate_ledger.csv', title='₹10L FlexGate Simulation Status', risk_pct=0.002)
+        render_velocity_simulation('data/flexgate_ledger.csv', title='₹10L FlexGate Simulation Status', risk_pct=0.002, ai_threshold=65.0)
             
     with tab4:
         st.markdown("""
@@ -1197,7 +1199,7 @@ elif page == "SBIA Institutional Engine":
         else:
             st.warning("Run flexgate_2_scanner.py to generate the FlexGate 2.0 Watchlist.")
         st.markdown('<br><br>', unsafe_allow_html=True)
-        render_velocity_simulation('data/flexgate2_ledger.csv', title='₹10L FlexGate 2.0 Simulation Status', risk_pct=0.002)
+        render_velocity_simulation('data/flexgate2_ledger.csv', title='₹10L FlexGate 2.0 Simulation Status', risk_pct=0.002, ai_threshold=60.0)
 
 # VERIFY CONDITIONS
 elif page == "Verify Conditions":
