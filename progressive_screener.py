@@ -12,6 +12,14 @@ class ProgressiveSpiker:
         required = ["SYMBOL", "CLOSE", "DELIV_PER", "DELIVERY_TURNOVER", "ATW"]
         if not all(col in df.columns for col in required):
             return pd.DataFrame()
+            
+        # Ensure DATE is datetime and filter out old/delisted records
+        if "DATE" in df.columns:
+            df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+            max_dt = df["DATE"].max()
+            if pd.notna(max_dt):
+                df = df[df["DATE"] >= (max_dt - pd.Timedelta(days=5))]
+
         
         # Filter out bad data
         df = df[df["CLOSE"] > 0]
