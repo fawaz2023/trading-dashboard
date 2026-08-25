@@ -198,8 +198,8 @@ def process_flexgate_engine(df, current_date):
         (flexgate_pool['Whale_Density'] > 0)
     )
     
-    # Load the model from the adjacent folder
-    model_path = r"C:\Users\fawaz\Desktop\Trading dashboard\flexgate_rf_model.pkl"
+    # Load ML Model for FlexGate 2.0 (Path B)
+    model_path = "flexgate_rf_model.pkl"
     if os.path.exists(model_path):
         model = joblib.load(model_path)
         features = ['WHALE_PCTL', 'Implied_Trades', 'SIS', 'STABILITY_SCORE', 'Phase1_ATW_Ratio', 'Phase2_Volume_Spike', 'Close_vs_VWAP_Pct_Distance', 'ATR_Pct']
