@@ -108,6 +108,14 @@ def process_flexgate_engine(df, current_date):
         if c not in df.columns:
             df[c] = 0.0
             
+    df = score_signals(df)
+    df["MOMENTUM_SCORE"] = df["MOMENTUM_RAW"].rank(pct=True, na_option="bottom")
+    df["FOOTPRINT_SCORE"] = df["FOOTPRINT_RAW"].rank(pct=True, na_option="bottom")
+    df["STABILITY_SCORE"] = df["STABILITY_RAW"].rank(pct=True, na_option="bottom")
+    df["SIS"] = ((df['STABILITY_SCORE'] + 1)**0.50 * 
+                (df['FOOTPRINT_SCORE'] + 1)**0.30 * 
+                (df['MOMENTUM_SCORE'] + 1)**0.20) - 1
+            
     # Phase 1: Consolidation
     p1 = (
         (df['DELIV_PER'] >= 50) &
@@ -172,16 +180,16 @@ def process_flexgate_engine(df, current_date):
     
     # Approximations for Kitchen Sink Features (since full historical lookback is missing in daily df)
     if 'ATW_1M' in flexgate_pool.columns and 'ATW_3M' in flexgate_pool.columns:
-        flexgate_pool['Phase1_ATW_Ratio'] = flexgate_pool['ATW_1M'] / flexgate_pool['ATW_3M'].replace(0, np.nan)
+        flexgate_pool['Phase1_ATW_Ratio'] = (flexgate_pool['ATW_1M'] / flexgate_pool['ATW_3M'].replace(0, np.nan)).fillna(0)
     else:
         flexgate_pool['Phase1_ATW_Ratio'] = 0.0
         
     if 'DELIVERY_TURNOVER_1M' in flexgate_pool.columns:
-        flexgate_pool['Phase2_Volume_Spike'] = flexgate_pool['DELIVERY_TURNOVER'] / flexgate_pool['DELIVERY_TURNOVER_1M'].replace(0, np.nan)
+        flexgate_pool['Phase2_Volume_Spike'] = (flexgate_pool['DELIVERY_TURNOVER'] / flexgate_pool['DELIVERY_TURNOVER_1M'].replace(0, np.nan)).fillna(0)
     else:
         flexgate_pool['Phase2_Volume_Spike'] = 0.0
         
-    flexgate_pool['Close_vs_VWAP_Pct_Distance'] = ((flexgate_pool['CLOSE'] - flexgate_pool['VWAP']) / flexgate_pool['VWAP'].replace(0, np.nan)) * 100
+    flexgate_pool['Close_vs_VWAP_Pct_Distance'] = (((flexgate_pool['CLOSE'] - flexgate_pool['VWAP']) / flexgate_pool['VWAP'].replace(0, np.nan)) * 100).fillna(0)
     
     # Fallback for WHALE_PCTL if missing
     if 'WHALE_PCTL' not in flexgate_pool.columns:
@@ -209,11 +217,13 @@ def process_flexgate_engine(df, current_date):
             if f not in flexgate_pool.columns:
                 flexgate_pool[f] = 0.0
                 
+        flexgate_pool["AI_WIN_PROBABILITY"] = 0.0
         pred_mask = flexgate_pool[features].notna().all(axis=1)
-        flexgate_pool.loc[pred_mask, "AI_WIN_PROBABILITY"] = model.predict_proba(flexgate_pool.loc[pred_mask, features])[:, 1] * 100
-        flexgate_pool["AI_WIN_PROBABILITY"] = flexgate_pool["AI_WIN_PROBABILITY"].fillna(0)
-        
-        # ML Gate >= 60%
+        if pred_mask.sum() > 0:
+            flexgate_pool.loc[pred_mask, "AI_WIN_PROBABILITY"] = model.predict_proba(flexgate_pool.loc[pred_mask, features])[:, 1] * 100
+        else:
+            print("Path B Output: No candidates survived the Heuristic Bouncer to reach the AI.")
+            
         flexgate_final = flexgate_pool[sanity_mask].copy()
         flexgate_final["AI_APPROVED"] = flexgate_final["AI_WIN_PROBABILITY"] >= 60.0
     else:
