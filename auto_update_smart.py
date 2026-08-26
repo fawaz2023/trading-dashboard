@@ -557,8 +557,10 @@ for symbol in symbols:
     df_1m = hist.head(22)
     df_3m = hist.head(66)
 
-    # Check if this stock ever had 100% delivery in the processed history
-    has_100_deliv = bool((df_stock["DELIV_PER"] >= 99.9).any())
+    # Check if this stock is likely a T2T stock (consistently ~100% delivery)
+    # Using mean >= 95.0% instead of .any() so normal stocks like PAYTM aren't banished 
+    # just because they hit a circuit limit on one day
+    has_100_deliv = bool(df_stock["DELIV_PER"].mean() >= 95.0)
 
     # Calculate VWAP logic
     latest_tottrdval = latest.get("TOTTRDVAL", 0)

@@ -310,10 +310,10 @@ def compute_progressive_averages(df_all):
                 lambda x: x.shift(1).rolling(window, min_periods=1).mean()
             )
 
-    # EVER_100_DELIV: expanding check — has this symbol EVER had >= 99.9% delivery?
+    # EVER_100_DELIV: Check if the stock is a T2T stock by seeing if its average delivery is >= 95%
     df_all["EVER_100_DELIV"] = grouped["DELIV_PER"].transform(
-        lambda x: x.expanding().max()
-    ) >= 99.9
+        lambda x: x.mean()
+    ) >= 95.0
 
     valid_rows = df_all["DELIV_PER_1M"].notna().sum()
     log(f"Rows with valid progressive data: {valid_rows}/{len(df_all)}")
