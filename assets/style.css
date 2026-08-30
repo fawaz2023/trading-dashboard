@@ -141,13 +141,22 @@ nav { flex: 1; padding: 0 12px; }
 
 /* VERIFY CONDITIONS ACCORDION */
 .glass-panel {
-    background-color: rgba(32, 31, 31, 0.4);
+    background-color: rgba(29, 33, 42, 0.7);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     border: 1px solid var(--border-subtle);
     border-radius: 12px;
     margin-bottom: 12px;
     overflow: hidden;
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
+.glow-hover:hover { box-shadow: 0 0 15px rgba(90, 240, 179, 0.2); border-color: rgba(255, 255, 255, 0.2); transition: all 0.3s ease; }
+.glow-accent { box-shadow: 0 0 15px rgba(90, 240, 179, 0.2); }
+.glow-primary { box-shadow: 0 0 20px rgba(90, 240, 179, 0.3); }
+.hero-mesh { background: linear-gradient(135deg, rgba(0,26,67,0.8) 0%, rgba(35,0,92,0.8) 100%); }
+.toggle-checkbox:checked { right: 0; border-color: #5af0b3; }
+.toggle-checkbox:checked + .toggle-label { background-color: #5af0b3; }
+.toggle-checkbox:checked + .toggle-label:after { transform: translateX(100%); border-color: #fff; }
 
 details.glass-panel summary {
     display: flex;
@@ -245,54 +254,6 @@ details.glass-panel .accordion-content {
     min-height: 300px;
     position: relative;
     padding: 16px;
-}
-
-/* Dashboard specific styles */
-.glass-panel { background-color: rgba(19, 19, 19, 0.7); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.1); }
-.glow-hover:hover { box-shadow: 0 0 15px rgba(90, 240, 179, 0.2); border-color: rgba(255, 255, 255, 0.2); transition: all 0.3s ease; }
-.hero-mesh { background: linear-gradient(135deg, rgba(0,26,67,0.8) 0%, rgba(35,0,92,0.8) 100%); }
-.toggle-checkbox:checked { right: 0; border-color: #5af0b3; }
-.toggle-checkbox:checked + .toggle-label { background-color: #5af0b3; }
-.toggle-checkbox:checked + .toggle-label:after { transform: translateX(100%); border-color: #fff; }
-
-
-.glass-panel {
-    background-color: rgba(29, 33, 42, 0.7);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.glow-accent {
-    box-shadow: 0 0 15px rgba(90, 240, 179, 0.2);
-}
-
-.glow-primary {
-    box-shadow: 0 0 20px rgba(90, 240, 179, 0.3);
-}
-
-/* Custom scrollbar for data tables */
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-::-webkit-scrollbar-track {
-    background: rgba(19, 19, 19, 0.5); 
-
-
-.glass-panel {
-    background-color: rgba(29, 33, 42, 0.7);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.glow-accent {
-    box-shadow: 0 0 15px rgba(90, 240, 179, 0.2);
-}
-
-.glow-primary {
-    box-shadow: 0 0 20px rgba(90, 240, 179, 0.3);
 }
 
 /* Custom scrollbar for data tables */

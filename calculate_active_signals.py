@@ -221,7 +221,11 @@ def process_flexgate_engine(df, current_date):
     # Integrate FlexGate Ledger to track SL simulation
     from ledger_manager import update_flexgate_ledger
     print("Updating FlexGate Trade Ledger and applying SL filters...")
-    flexgate_active, flexgate_ledger_full = update_flexgate_ledger(flexgate_final, df, ledger_path="data/flexgate_ledger.csv")
+    
+    # FIX: Only pass AI APPROVED signals into the active trading ledger
+    approved_signals = flexgate_final[flexgate_final["AI_APPROVED"] == True].copy()
+    
+    flexgate_active, flexgate_ledger_full = update_flexgate_ledger(approved_signals, df, ledger_path="data/flexgate_ledger.csv")
     
     flexgate_active.to_csv(FLEXGATE_FILE, index=False)
     print(f"Path B Output: {len(flexgate_active)} signals currently active in {FLEXGATE_FILE}")
@@ -370,6 +374,9 @@ def run_scoring():
         sbia_alpha_active, sbia_ledger_full = update_sbia_ledger(sbia_alpha_watchlist, df, ledger_path="data/sbia_ledger.csv")
 
         legacy_watchlist.to_csv("data/legacy_watchlist.csv", index=False)
+        # Restore Dash product output (regression in 80006526): the Dash Dashboard
+        # and Institutional Signals pages read this file.
+        legacy_watchlist.to_csv("data/active_signals_ranked.csv", index=False)
         sbia_alpha_active.to_csv("data/sbia_alpha_watchlist.csv", index=False)
 
         # Backward compatibility for existing dashboard code expecting this file
@@ -378,6 +385,23 @@ def run_scoring():
         print(f"Path A Output: {len(sbia_alpha_active)} ACTIVE signals written to data/sbia_alpha_watchlist.csv")
     else:
         print("Path A Output: No signals generated.")
+
+    # -----------------------------------------------------------------
+    # Freshness probe for the nightly diagnostic gate: today's raw signals.
+    # Rewritten on EVERY run (header-only on zero-signal days) so that
+    # diagnostic.py can detect when this engine has crashed.
+    # -----------------------------------------------------------------
+    probe_frames = []
+    for pool in (legacy_pool, sbia_pool):
+        if isinstance(pool, pd.DataFrame) and not pool.empty and "DATE" in pool.columns:
+            probe_frames.append(pool[pool["DATE"] == current_date])
+    if probe_frames:
+        today_probe = pd.concat(probe_frames, ignore_index=True)
+        if not today_probe.empty:
+            today_probe = today_probe.drop_duplicates(subset=["DATE", "SYMBOL", "EXCHANGE"], keep="last")
+    else:
+        today_probe = pd.DataFrame()
+    today_probe.to_csv("data/signal_scores_today.csv", index=False)
 
     # -----------------------------------------------------------------
     # PATH B: FlexGate Base-Loading Engine

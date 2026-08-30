@@ -20,9 +20,15 @@ print("SMART AUTO-UPDATE - NSE + BSE with Real Progressives (v4 ENHANCED)")
 print("=" * 70)
 
 holidays = [
+    # 2025 (kept for backfill lookback)
     "2025-01-26", "2025-03-14", "2025-03-29", "2025-04-10", "2025-04-14",
     "2025-05-01", "2025-08-15", "2025-10-02", "2025-10-22",
-    "2025-11-01", "2025-11-05", "2025-12-25"
+    "2025-11-01", "2025-11-05", "2025-12-25",
+    # 2026 (official NSE/BSE trading holidays; validated against repo data)
+    "2026-01-15", "2026-01-26", "2026-03-03", "2026-03-26", "2026-03-31",
+    "2026-04-03", "2026-04-14", "2026-05-01", "2026-05-28", "2026-06-26",
+    "2026-09-14", "2026-10-02", "2026-10-20", "2026-11-10", "2026-11-24",
+    "2026-12-25",
 ]
 
 # ================================================================
@@ -348,23 +354,49 @@ print(f"✅ BSE delivery rows: {len(df_bse_deliv)}")
 import json
 import pandas as pd
 try:
-    def get_max_date(df):
+    def _parse_status_date(val):
+        """Parse a DATE cell that may be a Timestamp, int/float (YYYYMMDD or
+        DDMMYYYY) or string. Returns a Timestamp or None if unparseable."""
+        try:
+            if pd.isna(val):
+                return None
+        except Exception:
+            pass
+        if isinstance(val, (pd.Timestamp, datetime)):
+            return pd.Timestamp(val)
+        s = str(val).strip()
+        if s.endswith(".0"):
+            s = s[:-2]
+        dt = pd.to_datetime(s, format='%Y%m%d', errors='coerce')
+        if pd.isna(dt):
+            dt = pd.to_datetime(s, format='%d%m%Y', errors='coerce')
+        if pd.isna(dt):
+            dt = pd.to_datetime(s, errors='coerce')
+        return None if pd.isna(dt) else dt
+
+    def get_max_date(df, label='feed'):
         if df is None or df.empty or 'DATE' not in df.columns:
+            print(f"⚠️  data_status[{label}]: no DATE data — reporting 'Missing'")
             return 'Missing'
-        max_val = df['DATE'].max()
-        if pd.isna(max_val):
+        parsed_max = None
+        for val in df['DATE'].dropna().unique():
+            dt = _parse_status_date(val)
+            if dt is None:
+                print(f"🚨 data_status[{label}]: unparseable DATE value {val!r} — "
+                      f"source files for this feed are MALFORMED. Reporting 'Missing'.")
+                return 'Missing'
+            if parsed_max is None or dt > parsed_max:
+                parsed_max = dt
+        if parsed_max is None:
+            print(f"⚠️  data_status[{label}]: all DATE values are NaN — reporting 'Missing'")
             return 'Missing'
-        if str(type(max_val)) == "<class 'numpy.int64'>" or isinstance(max_val, (int, str)):
-            dt = pd.to_datetime(str(max_val), format='%Y%m%d', errors='coerce')
-            return dt.strftime('%d %b %Y') if pd.notna(dt) else 'Missing'
-        else:
-            return max_val.strftime('%d %b %Y')
-            
+        return parsed_max.strftime('%d %b %Y')
+
     status_data = {
-        'nse_bhav_date': get_max_date(df_nse),
-        'nse_deliv_date': get_max_date(df_nse_deliv),
-        'bse_bhav_date': get_max_date(df_bse),
-        'bse_deliv_date': get_max_date(df_bse_deliv),
+        'nse_bhav_date': get_max_date(df_nse, 'nse_bhav'),
+        'nse_deliv_date': get_max_date(df_nse_deliv, 'nse_deliv'),
+        'bse_bhav_date': get_max_date(df_bse, 'bse_bhav'),
+        'bse_deliv_date': get_max_date(df_bse_deliv, 'bse_deliv'),
         'last_run': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
     with open('data/data_status.json', 'w') as f:
@@ -637,22 +669,62 @@ print("="*70)
 print("Calculating institutional metrics...")
 try:
     import subprocess
-    result = subprocess.run(["python", "calculate_active_signals.py"],
-                             timeout=300, capture_output=True, text=True)
-    if result.returncode == 0:
-        print("Legacy Institutional metrics calculated successfully")
-    else:
-        print(f"Legacy Institutional metrics had errors: {result.stderr[:200]}")
+    os.makedirs("logs", exist_ok=True)
+    METRICS_LOG = os.path.join("logs", "metrics_errors.log")
+
+    def run_metrics_engine(engine_name, script):
+        """Run a metrics engine, print full stderr and log to file on failure."""
+        print(f"Running {engine_name}...")
+        try:
+            result = subprocess.run(
+                [sys.executable, script],
+                timeout=300, capture_output=True, text=True,
+                encoding='utf-8', errors='replace',
+            )
+        except subprocess.TimeoutExpired:
+            stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(METRICS_LOG, "a", encoding="utf-8") as f:
+                f.write(f"\n{'='*70}\n[{stamp}] {script} TIMED OUT after 300s\n")
+            print(f"🚨 {engine_name} TIMED OUT after 300s — logged to {METRICS_LOG}")
+            return False
+        if result.returncode == 0:
+            print(f"{engine_name} metrics calculated successfully")
+            return True
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        stderr_full = result.stderr or "(no stderr captured)"
+        print(f"🚨 {engine_name} FAILED (return code {result.returncode}). Full stderr:")
+        print(stderr_full)
+        with open(METRICS_LOG, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*70}\n[{stamp}] {script} failed, return code {result.returncode}\n")
+            f.write(stderr_full)
+            if result.stdout:
+                f.write(f"\n--- stdout (last 2000 chars) ---\n{result.stdout[-2000:]}\n")
+        print(f"🚨 Full error details appended to {METRICS_LOG}")
+        return False
+
+    ok_a = run_metrics_engine("Legacy Institutional", "calculate_active_signals.py")
+    ok_b = run_metrics_engine("FlexGate 2.0 ML", "flexgate_2_scanner.py")
+    if not (ok_a and ok_b):
+        print(f"🚨 METRICS ENGINES FAILED — data/active_signals_ranked.csv and/or ledgers may be stale. See {METRICS_LOG}.")
         
-    print("Running FlexGate 2.0 ML Engine...")
-    result2 = subprocess.run(["python", "flexgate_2_scanner.py"],
-                             timeout=300, capture_output=True, text=True)
-    if result2.returncode == 0:
-        print("FlexGate 2.0 metrics calculated successfully")
-    else:
-        print(f"FlexGate 2.0 metrics had errors: {result2.stderr[:200]}")
+    # Freshness Check
+    import pandas as pd
+    import os
+    if os.path.exists("data/combined_dashboard_live.csv") and os.path.exists("data/active_signals_ranked.csv"):
+        try:
+            live_df = pd.read_csv("data/combined_dashboard_live.csv")
+            sig_df = pd.read_csv("data/active_signals_ranked.csv")
+            live_max = str(live_df['DATE'].max())
+            sig_max = str(sig_df['DATE'].max())
+            if live_max != sig_max:
+                print(f"🚨 FRESHNESS WARNING: active_signals_ranked.csv is stale! (Live: {live_max}, Signals: {sig_max})")
+                with open(METRICS_LOG, "a", encoding="utf-8") as f:
+                    f.write(f"\n[FRESHNESS WARNING] active_signals_ranked.csv is stale! (Live: {live_max}, Signals: {sig_max})\n")
+        except Exception as e:
+            print(f"Could not perform freshness check: {e}")
+            
 except Exception as e:
-    print(f"Metrics calculations failed (non-critical): {e}")
+    print(f"🚨 Metrics calculations failed (non-critical): {e}")
 
 import sys
 sys.exit(0)

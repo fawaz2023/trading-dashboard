@@ -204,5 +204,4 @@ def toggle_sidebar(n_clicks, state):
     return new_style, {"collapsed": new_collapsed}, new_icon, new_title_style
 
 if __name__ == '__main__':
-    os.makedirs("pages", exist_ok=True)
-    app.run(debug=True, port=8050)
+    app.run(debug=os.environ.get("DASH_DEBUG") == "1", port=8050)

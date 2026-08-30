@@ -20,7 +20,10 @@ echo [1/4] Downloading NSE + BSE data...
 echo ----------------------------------------------------------------------
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
-python auto_update_smart.py
+echo Checking Python path...
+python --version
+where python
+venv\Scripts\python.exe auto_update_smart.py
 
 REM Check if download was successful (errorlevel 0 = success)
 if errorlevel 1 (
@@ -42,7 +45,7 @@ echo.
 REM ===== STEP 2: Sanity Check Diagnostics =====
 echo [2/5] Running Pipeline Diagnostics...
 echo ----------------------------------------------------------------------
-python diagnostic.py
+venv\Scripts\python.exe diagnostic.py
 
 if errorlevel 1 (
     echo.
@@ -143,7 +146,7 @@ echo Commit: %commit_msg%
 echo Status: Pushed to GitHub successfully
 echo URL:    https://github.com/fawaz2023/trading-dashboard
 echo.
-echo Your Streamlit dashboard will refresh in 2-3 minutes
+echo The Dash deployment will reflect the new data immediately
 echo ======================================================================
 goto :end_success
 
@@ -151,7 +154,7 @@ REM ===== ERROR HANDLER WITH EMAIL ALERT =====
 :error
 echo.
 echo Sending error notification email...
-python send_error_email.py
+venv\Scripts\python.exe send_error_email.py
 echo.
 echo End Time: %date% %time%
 echo ======================================================================

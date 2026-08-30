@@ -2,12 +2,30 @@ import dash
 from dash import html, dcc
 import pandas as pd
 import os
+from functools import lru_cache
 
 dash.register_page(__name__, path='/', name='Dashboard', title='Pro Spike - Dashboard')
 
+FALLBACK_TOTAL_SCANNED = 5518
+FALLBACK_NSE = 2543
+FALLBACK_BSE = 2975
+
+@lru_cache(maxsize=1)
+def load_universe_stats():
+    """Derive universe counts from the live combined file (cached per process)."""
+    try:
+        df = pd.read_csv(os.path.join("data", "combined_dashboard_live.csv"), usecols=["EXCHANGE", "DATE"])
+        nse = int((df["EXCHANGE"] == "NSE").sum())
+        bse = int((df["EXCHANGE"] == "BSE").sum())
+        as_of = pd.to_datetime(df["DATE"], errors="coerce").max()
+        return len(df), nse, bse, as_of
+    except Exception:
+        return FALLBACK_TOTAL_SCANNED, FALLBACK_NSE, FALLBACK_BSE, None
+
 def layout():
     data_path = os.path.join("data", "active_signals_ranked.csv")
-    total_scanned = 5518
+    total_scanned, nse_count, bse_count, as_of = load_universe_stats()
+    as_of_str = as_of.strftime("%d %b %Y") if as_of is not None else "—"
     active_signals = 0
     signal_rows = []
     
@@ -202,7 +220,7 @@ def layout():
                                     html.Div(className="absolute top-0 right-0 p-4 text-secondary/20 group-hover:text-secondary/40 transition-colors", children=[html.Span("stacked_bar_chart", className="material-symbols-outlined text-[48px]")]),
                                     html.Div("Total Scanned", className="font-label-sm text-[12px] font-bold text-on-surface-variant tracking-widest uppercase mb-1"),
                                     html.Div(f"{total_scanned:,}", className="font-display-lg text-[40px] font-bold text-secondary animate-number-roll"),
-                                    html.Div("As of 07 Aug 2026", className="text-[10px] text-on-surface-variant mt-4")
+                                    html.Div(f"As of {as_of_str}", className="text-[10px] text-on-surface-variant mt-4")
                                 ]
                             ),
                             # Secondary Stats Grid
@@ -213,14 +231,14 @@ def layout():
                                         className="glass-panel rounded-2xl p-5 flex flex-col justify-between hover:bg-white/5 transition-colors",
                                         children=[
                                             html.Div("NSE Stocks", className="font-label-sm text-[10px] font-bold text-on-surface-variant uppercase"),
-                                            html.Div("2,543", className="font-headline-md text-[24px] font-semibold text-on-surface mt-2 animate-number-roll")
+                                            html.Div(f"{nse_count:,}", className="font-headline-md text-[24px] font-semibold text-on-surface mt-2 animate-number-roll")
                                         ]
                                     ),
                                     html.Div(
                                         className="glass-panel rounded-2xl p-5 flex flex-col justify-between hover:bg-white/5 transition-colors",
                                         children=[
                                             html.Div("BSE Stocks", className="font-label-sm text-[10px] font-bold text-on-surface-variant uppercase"),
-                                            html.Div("2,975", className="font-headline-md text-[24px] font-semibold text-on-surface mt-2 animate-number-roll")
+                                            html.Div(f"{bse_count:,}", className="font-headline-md text-[24px] font-semibold text-on-surface mt-2 animate-number-roll")
                                         ]
                                     )
                                 ]

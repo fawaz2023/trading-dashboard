@@ -253,7 +253,11 @@ def process_flexgate_engine(df, current_date):
     # Integrate FlexGate Ledger to track SL simulation
     from ledger_manager import update_flexgate_ledger
     print("Updating FlexGate 2.0 Trade Ledger and applying SL filters...")
-    flexgate_active, flexgate_ledger_full = update_flexgate_ledger(flexgate_final, df, ledger_path="data/flexgate2_ledger.csv")
+    
+    # FIX: Only pass AI APPROVED signals into the active trading ledger
+    approved_signals = flexgate_final[flexgate_final["AI_APPROVED"] == True].copy()
+    
+    flexgate_active, flexgate_ledger_full = update_flexgate_ledger(approved_signals, df, ledger_path="data/flexgate2_ledger.csv")
     
     flexgate_active.to_csv(FLEXGATE_FILE, index=False)
     print(f"Path B Output: {len(flexgate_active)} signals currently active in {FLEXGATE_FILE}")
