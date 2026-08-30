@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Fonts: Geist + JetBrains Mono are loaded by dash_app_v2.py external_stylesheets */
 
 :root {
     --bg-base: #08090d;
@@ -22,7 +22,7 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Geist', 'Inter', sans-serif;
     background-color: var(--bg-base);
     color: var(--text-primary);
     display: flex;
@@ -92,7 +92,7 @@ nav { flex: 1; padding: 0 12px; }
     --ag-border-color: var(--border-subtle);
     --ag-row-hover-color: rgba(129, 140, 248, 0.03);
     --ag-header-foreground-color: var(--text-muted);
-    --ag-font-family: 'Inter', sans-serif;
+    --ag-font-family: 'Geist', sans-serif;
     border: 1px solid var(--border-subtle);
     border-radius: 12px;
     height: 600px;
@@ -254,22 +254,6 @@ details.glass-panel .accordion-content {
     min-height: 300px;
     position: relative;
     padding: 16px;
-}
-
-/* Custom scrollbar for data tables */
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-::-webkit-scrollbar-track {
-    background: rgba(19, 19, 19, 0.5); 
-}
-::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2); 
-    border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.4); 
 }
 
 /* 2026 Kinetic Animations */

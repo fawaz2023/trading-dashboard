@@ -12,3 +12,11 @@ data/ml/
 data/nse_raw/
 data/bse_raw/
 data/combined_2years.csv
+
+venv/
+*.log
+flexgate_test_output.log
+backups/
+scratch/
+.kilo/
+logs/
