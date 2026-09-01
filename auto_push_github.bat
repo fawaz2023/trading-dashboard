@@ -20,10 +20,7 @@ echo [1/4] Downloading NSE + BSE data...
 echo ----------------------------------------------------------------------
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
-echo Checking Python path...
-python --version
-where python
-venv\Scripts\python.exe auto_update_smart.py
+python auto_update_smart.py
 
 REM Check if download was successful (errorlevel 0 = success)
 if errorlevel 1 (
