@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc
+from dash import html, dcc, Input, Output
 import pandas as pd
 import os
 from functools import lru_cache
@@ -14,6 +14,11 @@ SBIA_LEDGER = os.path.join("data", "sbia_ledger.csv")
 FLEXGATE_LEDGER = os.path.join("data", "flexgate_ledger.csv")
 FLEXGATE2_LEDGER = os.path.join("data", "flexgate2_ledger.csv")
 CLOUD_FILE = os.path.join("data", "dashboard_cloud.csv")
+
+# Display caps: keep tab payloads small (Tailwind CDN JIT rescans every DOM
+# injection, so huge tables freeze the browser). Most recent rows are kept.
+MAX_SIM_ROWS = 40
+MAX_COMPLETED_ROWS = 40
 
 TAB_STYLE = {
     "background": "rgba(255,255,255,0.03)",
@@ -74,23 +79,33 @@ def _section_header(text, accent="#5af0b3", size="15px"):
     )
 
 
-def _grid_table(columns, rows, min_width=760):
-    style = {"gridTemplateColumns": f"repeat({len(columns)}, minmax(0, 1fr))", "minWidth": f"{min_width}px"}
+def _template(columns, wide=None):
+    """Grid track template: per-column overrides (by column name) for wide content."""
+    wide = wide or {}
+    return " ".join(wide.get(c, "minmax(0, 1fr)") for c in columns)
+
+
+def _grid_table(columns, rows, min_width=760, wide=None):
+    style = {"gridTemplateColumns": _template(columns, wide)}
     header = html.Div(
-        className="grid gap-2 px-4 py-3 font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider border-b border-outline-variant",
+        className="grid gap-2 px-4 py-3 font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider border-b border-outline-variant break-words",
         style=style,
         children=[html.Div(c) for c in columns],
     )
+    inner_wrapper = html.Div(
+        style={"minWidth": f"{min_width}px"},
+        children=[header] + rows,
+    )
     return html.Div(
         className="glass-panel rounded-2xl overflow-x-auto",
-        children=[header] + rows,
+        children=[inner_wrapper],
     )
 
 
-def _grid_row(cells, n, row_class=""):
-    style = {"gridTemplateColumns": f"repeat({n}, minmax(0, 1fr))"}
+def _grid_row(cells, tpl, row_class=""):
+    style = {"gridTemplateColumns": tpl}
     return html.Div(
-        className=f"grid gap-2 px-4 py-3 items-center font-data-md text-sm border-b border-outline-variant/40 hover:bg-white/5 transition-colors {row_class}",
+        className=f"grid gap-2 px-4 py-3 items-center font-data-md text-sm border-b border-outline-variant/40 hover:bg-white/5 transition-colors break-words {row_class}",
         style=style,
         children=cells,
     )
@@ -123,14 +138,14 @@ def _num(v, default=None):
 def _prob_cell(v):
     pct = _num(v)
     if pct is None:
-        return html.Div("-", className="font-data-md text-on-surface-variant")
+        return html.Div("-", className="text-on-surface-variant")
     bar = "bg-primary" if pct >= 80 else ("bg-secondary" if pct >= 60 else "bg-on-surface-variant")
     txt = "text-primary" if pct >= 80 else ("text-secondary" if pct >= 60 else "text-on-surface-variant")
     return html.Div(
         className="flex items-center gap-2",
         children=[
             html.Div(className=f"h-1.5 rounded-full {bar}", style={"width": f"{min(pct, 100)}%", "minWidth": "4px"}),
-            html.Span(f"{pct:.1f}%", className=f"font-data-md text-sm {txt}"),
+            html.Span(f"{pct:.1f}%", className=f"{txt}"),
         ],
     )
 
@@ -151,6 +166,8 @@ def legacy_table():
 
     cols = ["DATE", "SYMBOL", "EXCHANGE", "CLOSE", "AI_SCORE", "SIS", "Whale_Density", "Implied_Trades", "STABILITY_RAW", "TRIGGER_COUNT_30D", "DELIV_PER", "DELIVERY_TURNOVER", "ATW"]
     avail = [c for c in cols if c in df.columns]
+    wide = {"DATE": "minmax(115px, 1fr)", "SYMBOL": "minmax(190px, 1.8fr)"}
+    tpl = _template(avail, wide)
     fmt = {
         "CLOSE": lambda v: _f(v, "{:.2f}", "₹"),
         "AI_SCORE": lambda v: _f(v, "{:.2f}"),
@@ -191,19 +208,19 @@ def legacy_table():
         cells = []
         for c in avail:
             if c == "SYMBOL":
-                cells.append(html.Div(sym, className="font-data-md text-on-surface font-semibold"))
+                cells.append(html.Div(sym, className="font-semibold"))
             elif c == "DATE":
-                cells.append(html.Div(str(r.get(c, "-")) if pd.notna(r.get(c)) else "-", className="font-data-md text-on-surface-variant"))
+                cells.append(html.Div(str(r.get(c, "-")) if pd.notna(r.get(c)) else "-", className="text-on-surface-variant"))
             elif c == "EXCHANGE":
-                cells.append(html.Div(str(r.get(c, "-")), className="font-data-md text-on-surface-variant uppercase text-xs"))
+                cells.append(html.Div(str(r.get(c, "-")), className="text-on-surface-variant uppercase text-xs"))
             elif c in fmt:
-                cells.append(html.Div(fmt[c](r.get(c)), className="font-data-md text-on-surface"))
+                cells.append(html.Div(fmt[c](r.get(c)), className="text-on-surface"))
             else:
                 raw = r.get(c)
-                cells.append(html.Div("-" if raw is None or pd.isna(raw) else str(raw), className="font-data-md text-on-surface"))
-        rows.append(_grid_row(cells, len(avail), row_class))
+                cells.append(html.Div("-" if raw is None or pd.isna(raw) else str(raw), className="text-on-surface"))
+        rows.append(_grid_row(cells, tpl, row_class))
 
-    return _grid_table(avail, rows, min_width=980)
+    return _grid_table(avail, rows, min_width=1140, wide=wide)
 
 
 def alpha_table():
@@ -218,6 +235,8 @@ def alpha_table():
 
     cols = ["DATE", "SYMBOL", "EXCHANGE", "ENTRY_PRICE", "CLOSE", "AI_WIN_PROBABILITY", "SIS", "Whale_Density", "Implied_Trades", "STOP_LOSS", "TAKE_PROFIT", "REC_POS_SIZE_INR", "ATR14"]
     avail = [c for c in cols if c in df.columns]
+    wide = {"DATE": "minmax(115px, 1fr)", "SYMBOL": "minmax(170px, 1.6fr)", "STOP_LOSS": "minmax(150px, 1.3fr)", "TAKE_PROFIT": "minmax(150px, 1.3fr)"}
+    tpl = _template(avail, wide)
 
     rows = []
     for _, r in df.iterrows():
@@ -225,31 +244,31 @@ def alpha_table():
         cells = []
         for c in avail:
             if c == "SYMBOL":
-                cells.append(html.Div(str(r.get(c, "")), className="font-data-md text-on-surface font-semibold"))
+                cells.append(html.Div(str(r.get(c, "")), className="font-semibold"))
             elif c == "DATE":
-                cells.append(html.Div(str(r.get(c, "-")) if pd.notna(r.get(c)) else "-", className="font-data-md text-on-surface-variant"))
+                cells.append(html.Div(str(r.get(c, "-")) if pd.notna(r.get(c)) else "-", className="text-on-surface-variant"))
             elif c == "EXCHANGE":
-                cells.append(html.Div(str(r.get(c, "-")), className="font-data-md text-on-surface-variant uppercase text-xs"))
+                cells.append(html.Div(str(r.get(c, "-")), className="text-on-surface-variant uppercase text-xs"))
             elif c == "AI_WIN_PROBABILITY":
                 cells.append(_prob_cell(r.get(c)))
             elif c == "STOP_LOSS":
-                cells.append(html.Div(_sl_tp_str(r.get(c), entry), className="font-data-md text-error text-sm"))
+                cells.append(html.Div(_sl_tp_str(r.get(c), entry), className="text-error"))
             elif c == "TAKE_PROFIT":
-                cells.append(html.Div(_sl_tp_str(r.get(c), entry, "+"), className="font-data-md text-primary text-sm"))
+                cells.append(html.Div(_sl_tp_str(r.get(c), entry, "+"), className="text-primary"))
             elif c in ("ENTRY_PRICE", "CLOSE", "ATR14"):
-                cells.append(html.Div(_f(r.get(c), "{:.2f}", "₹"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:.2f}", "₹"), className="text-on-surface"))
             elif c == "REC_POS_SIZE_INR":
-                cells.append(html.Div(_f(r.get(c), "{:,.0f}", "₹"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:,.0f}", "₹"), className="text-on-surface"))
             elif c in ("SIS", "Whale_Density"):
-                cells.append(html.Div(_f(r.get(c), "{:.2f}"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:.2f}"), className="text-on-surface"))
             elif c == "Implied_Trades":
-                cells.append(html.Div(_f(r.get(c), "{:,.0f}"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:,.0f}"), className="text-on-surface"))
             else:
                 raw = r.get(c)
-                cells.append(html.Div("-" if raw is None or pd.isna(raw) else str(raw), className="font-data-md text-on-surface"))
-        rows.append(_grid_row(cells, len(avail)))
+                cells.append(html.Div("-" if raw is None or pd.isna(raw) else str(raw), className="text-on-surface"))
+        rows.append(_grid_row(cells, tpl))
 
-    return _grid_table(avail, rows, min_width=1080)
+    return _grid_table(avail, rows, min_width=1280, wide=wide)
 
 
 _STATUS_BADGE = {
@@ -269,12 +288,20 @@ def completed_trades():
         return html.Div("No completed trades recorded yet.", className="p-4 font-body-md text-outline text-center")
 
     if "ENTRY_DATE" in completed.columns:
+        completed = completed.sort_values("ENTRY_DATE", ascending=False)
+    total_completed = len(completed)
+    if total_completed > MAX_COMPLETED_ROWS:
+        completed = completed.head(MAX_COMPLETED_ROWS)
+
+    if "ENTRY_DATE" in completed.columns:
         completed["ENTRY_DATE"] = _fmt_date(completed["ENTRY_DATE"])
     if "EXIT_DATE" in completed.columns:
         completed["EXIT_DATE"] = _fmt_date(completed["EXIT_DATE"])
 
     cols = ["ENTRY_DATE", "SYMBOL", "STATUS", "ENTRY_AI_PROB", "ENTRY_WHALE_DENSITY", "ENTRY_PRICE", "EXIT_PRICE", "EXIT_DATE", "STOP_LOSS", "TAKE_PROFIT"]
     avail = [c for c in cols if c in completed.columns]
+    wide = {"ENTRY_DATE": "minmax(115px, 1fr)", "SYMBOL": "minmax(165px, 1.5fr)", "EXIT_PRICE": "minmax(150px, 1.3fr)", "STOP_LOSS": "minmax(145px, 1.25fr)", "TAKE_PROFIT": "minmax(145px, 1.25fr)"}
+    tpl = _template(avail, wide)
 
     rows = []
     for _, r in completed.iterrows():
@@ -282,23 +309,23 @@ def completed_trades():
         cells = []
         for c in avail:
             if c == "SYMBOL":
-                cells.append(html.Div(str(r.get(c, "")), className="font-data-md text-on-surface font-semibold"))
+                cells.append(html.Div(str(r.get(c, "")), className="font-semibold"))
             elif c == "STATUS":
                 badge = _STATUS_BADGE.get(str(r.get(c, "")), "text-on-surface-variant")
-                cells.append(html.Div(str(r.get(c, "-")), className=f"font-data-md text-sm {badge}"))
+                cells.append(html.Div(str(r.get(c, "-")), className=f"{badge}"))
             elif c in ("ENTRY_DATE", "EXIT_DATE"):
-                cells.append(html.Div(str(r.get(c, "-")) if pd.notna(r.get(c)) else "-", className="font-data-md text-on-surface-variant"))
+                cells.append(html.Div(str(r.get(c, "-")) if pd.notna(r.get(c)) else "-", className="text-on-surface-variant"))
             elif c == "ENTRY_AI_PROB":
-                cells.append(html.Div(_f(r.get(c), "{:.1f}%"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:.1f}%"), className="text-on-surface"))
             elif c == "ENTRY_WHALE_DENSITY":
-                cells.append(html.Div(_f(r.get(c), "{:.2f}"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:.2f}"), className="text-on-surface"))
             elif c == "ENTRY_PRICE":
-                cells.append(html.Div(_f(r.get(c), "{:.2f}", "₹"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:.2f}", "₹"), className="text-on-surface"))
             elif c == "EXIT_PRICE":
                 exit_n = _num(r.get(c))
                 entry_n = _num(entry)
                 if exit_n is None:
-                    cells.append(html.Div("N/A", className="font-data-md text-on-surface-variant"))
+                    cells.append(html.Div("N/A", className="text-on-surface-variant"))
                 else:
                     if entry_n is not None and entry_n > 0:
                         sign = "+" if exit_n >= entry_n else ""
@@ -306,29 +333,38 @@ def completed_trades():
                     else:
                         s = f"₹{exit_n:.2f}"
                     color = "text-primary" if (entry_n is not None and exit_n >= entry_n) else "text-error"
-                    cells.append(html.Div(s, className=f"font-data-md text-sm {color}"))
+                    cells.append(html.Div(s, className=f"{color}"))
             elif c == "STOP_LOSS":
-                cells.append(html.Div(_sl_tp_str(r.get(c), entry), className="font-data-md text-error text-sm"))
+                cells.append(html.Div(_sl_tp_str(r.get(c), entry), className="text-error"))
             elif c == "TAKE_PROFIT":
-                cells.append(html.Div(_sl_tp_str(r.get(c), entry, "+"), className="font-data-md text-primary text-sm"))
+                cells.append(html.Div(_sl_tp_str(r.get(c), entry, "+"), className="text-primary"))
             else:
                 raw = r.get(c)
-                cells.append(html.Div("-" if raw is None or pd.isna(raw) else str(raw), className="font-data-md text-on-surface"))
-        rows.append(_grid_row(cells, len(avail)))
+                cells.append(html.Div("-" if raw is None or pd.isna(raw) else str(raw), className="text-on-surface"))
+        rows.append(_grid_row(cells, tpl))
+
+    completed_footer = []
+    if total_completed > MAX_COMPLETED_ROWS:
+        completed_footer.append(
+            html.Div(
+                f"Showing {MAX_COMPLETED_ROWS} most recent of {total_completed} completed trades.",
+                className="px-4 py-2 font-label-caps text-[10px] text-outline uppercase tracking-wider",
+            )
+        )
 
     return html.Details(
         className="glass-panel rounded-2xl mt-4 overflow-x-auto",
         children=[
             html.Summary("🕰️ Historical / Completed Trades", className="px-4 py-3 font-label-caps text-on-surface-variant uppercase tracking-wider text-xs cursor-pointer select-none"),
             html.Div(
-                className="overflow-x-auto",
+                style={"minWidth": "1150px"},
                 children=[
                     html.Div(
-                        className="grid gap-2 px-4 py-3 font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider border-b border-outline-variant",
-                        style={"gridTemplateColumns": f"repeat({len(avail)}, minmax(0, 1fr))", "minWidth": "980px"},
+                        className="grid gap-2 px-4 py-3 font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider border-b border-outline-variant break-words",
+                        style={"gridTemplateColumns": tpl},
                         children=[html.Div(c) for c in avail],
                     )
-                ] + rows,
+                ] + rows + completed_footer,
             ),
         ],
     )
@@ -349,40 +385,42 @@ def flexgate_table(path, missing_msg, empty_msg):
     avail = [c for c in cols if c in df.columns or c == "AI_STATUS"]
     if not has_ai:
         avail = [c for c in avail if c != "AI_STATUS"]
+    wide = {"DATE": "minmax(115px, 1fr)", "SYMBOL": "minmax(170px, 1.5fr)"}
+    tpl = _template(avail, wide)
 
     rows = []
     for _, r in df.iterrows():
         cells = []
         for c in avail:
             if c == "SYMBOL":
-                cells.append(html.Div(str(r.get(c, "")), className="font-data-md text-on-surface font-semibold"))
+                cells.append(html.Div(str(r.get(c, "")), className="font-semibold"))
             elif c == "DATE":
-                cells.append(html.Div(str(r.get(c, "-")) if pd.notna(r.get(c)) else "-", className="font-data-md text-on-surface-variant"))
+                cells.append(html.Div(str(r.get(c, "-")) if pd.notna(r.get(c)) else "-", className="text-on-surface-variant"))
             elif c == "EXCHANGE":
-                cells.append(html.Div(str(r.get(c, "-")), className="font-data-md text-on-surface-variant uppercase text-xs"))
+                cells.append(html.Div(str(r.get(c, "-")), className="text-on-surface-variant uppercase text-xs"))
             elif c == "AI_STATUS":
                 prob = _num(r.get("AI_WIN_PROBABILITY"))
                 approved = bool(r.get("AI_APPROVED"))
                 if prob is None:
-                    cells.append(html.Div("-", className="font-data-md text-on-surface-variant"))
+                    cells.append(html.Div("-", className="text-on-surface-variant"))
                 elif approved:
-                    cells.append(html.Div(f"✅ {prob:.1f}%", className="text-[#2ecc71] font-semibold bg-[rgba(46,204,113,0.10)] px-2 py-0.5 rounded-full w-fit text-xs font-data-md"))
+                    cells.append(html.Div(f"✅ {prob:.1f}%", className="text-[#2ecc71] font-semibold bg-[rgba(46,204,113,0.10)] px-2 py-0.5 rounded-full w-fit text-xs"))
                 else:
-                    cells.append(html.Div(f"❌ {prob:.1f}%", className="text-[#e74c3c] italic bg-[rgba(231,76,60,0.08)] px-2 py-0.5 rounded-full w-fit text-xs font-data-md"))
+                    cells.append(html.Div(f"❌ {prob:.1f}%", className="text-[#e74c3c] italic bg-[rgba(231,76,60,0.08)] px-2 py-0.5 rounded-full w-fit text-xs"))
             elif c in ("CLOSE", "ATR14", "CHANDELIER_EXIT"):
-                cells.append(html.Div(_f(r.get(c), "{:.2f}", "₹"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:.2f}", "₹"), className="text-on-surface"))
             elif c == "REC_POS_SIZE_INR":
-                cells.append(html.Div(_f(r.get(c), "{:,.0f}", "₹"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:,.0f}", "₹"), className="text-on-surface"))
             elif c in ("SIS", "Whale_Density"):
-                cells.append(html.Div(_f(r.get(c), "{:.2f}"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:.2f}"), className="text-on-surface"))
             elif c == "Implied_Trades":
-                cells.append(html.Div(_f(r.get(c), "{:,.0f}"), className="font-data-md text-on-surface"))
+                cells.append(html.Div(_f(r.get(c), "{:,.0f}"), className="text-on-surface"))
             else:
                 raw = r.get(c)
-                cells.append(html.Div("-" if raw is None or pd.isna(raw) else str(raw), className="font-data-md text-on-surface"))
-        rows.append(_grid_row(cells, len(avail)))
+                cells.append(html.Div("-" if raw is None or pd.isna(raw) else str(raw), className="text-on-surface"))
+        rows.append(_grid_row(cells, tpl))
 
-    return _grid_table(avail, rows, min_width=980)
+    return _grid_table(avail, rows, min_width=1080, wide=wide)
 
 
 def _sim_tile(title, accent, stat_a_label, stat_a_value, stat_b_label, stat_b_value, stat_b_class=""):
@@ -527,31 +565,41 @@ def velocity_simulation(ledger_csv, risk_pct, ai_threshold=None, title="₹10L V
         sim_df = pd.DataFrame(sim_records)
         sim_df = sim_df.sort_values(by="DATE", ascending=False)
         sim_cols = ["DATE", "SYMBOL", "STATUS", "INVESTED", "CURR_VALUE", "REALIZED_PNL", "UNREALIZED_PNL", "TOTAL_PNL", "PNL_%"]
+        sim_wide = {"DATE": "minmax(115px, 1fr)", "SYMBOL": "minmax(160px, 1.4fr)"}
+        sim_tpl = _template(sim_cols, sim_wide)
         sim_status_class = {
             "ACTIVE": "text-[#f1c40f] font-semibold",
             "HIT_TP": "text-[#2ecc71] font-semibold",
             "HIT_SL": "text-[#e74c3c] font-semibold",
         }
         rows = []
-        for _, r in sim_df.head(100).iterrows():
+        for _, r in sim_df.head(MAX_SIM_ROWS).iterrows():
             cells = []
             for c in sim_cols:
                 v = r.get(c)
                 if c in ("DATE", "SYMBOL"):
-                    cells.append(html.Div("-" if v is None or pd.isna(v) else str(v), className="font-data-md text-sm text-on-surface" if c == "SYMBOL" else "font-data-md text-sm text-on-surface-variant"))
+                    cells.append(html.Div("-" if v is None or pd.isna(v) else str(v), className="text-on-surface" if c == "SYMBOL" else "text-on-surface-variant"))
                 elif c == "STATUS":
-                    cells.append(html.Div("-" if v is None or pd.isna(v) else str(v), className=f"font-data-md text-sm {sim_status_class.get(str(v), 'text-[#95a5a6]')}"))
+                    cells.append(html.Div("-" if v is None or pd.isna(v) else str(v), className=sim_status_class.get(str(v), "text-[#95a5a6]")))
                 elif c in ("INVESTED", "CURR_VALUE"):
-                    cells.append(html.Div(_f(v, "{:,.0f}", "₹"), className="font-data-md text-sm text-on-surface"))
+                    cells.append(html.Div(_f(v, "{:,.0f}", "₹"), className="text-on-surface"))
                 elif c == "PNL_%":
                     n = _num(v)
                     cls = "text-[#2ecc71]" if (n is not None and n > 0) else ("text-[#e74c3c]" if (n is not None and n < 0) else "text-[#95a5a6]")
-                    cells.append(html.Div(_f(v, "{:+.1f}%"), className=f"font-data-md text-sm {cls}"))
+                    cells.append(html.Div(_f(v, "{:+.1f}%"), className=cls))
                 else:
                     n = _num(v)
                     cls = "text-[#2ecc71]" if (n is not None and n > 0) else ("text-[#e74c3c]" if (n is not None and n < 0) else "text-[#95a5a6]")
-                    cells.append(html.Div(f"{'+' if (n is not None and n >= 0) else ''}₹{n:,.0f}" if n is not None else "-", className=f"font-data-md text-sm {cls}"))
-            rows.append(_grid_row(cells, len(sim_cols)))
+                    cells.append(html.Div(f"{'+' if (n is not None and n >= 0) else ''}₹{n:,.0f}" if n is not None else "-", className=cls))
+            rows.append(_grid_row(cells, sim_tpl))
+
+        if len(sim_df) > MAX_SIM_ROWS:
+            rows.append(
+                html.Div(
+                    f"Showing {MAX_SIM_ROWS} most recent of {len(sim_df)} simulated trades.",
+                    className="px-4 py-2 font-label-caps text-[10px] text-outline uppercase tracking-wider",
+                )
+            )
 
         ledger_section.append(
             html.Details(
@@ -559,11 +607,11 @@ def velocity_simulation(ledger_csv, risk_pct, ai_threshold=None, title="₹10L V
                 children=[
                     html.Summary("📝 View Trade-by-Trade Simulation Ledger", className="px-4 py-3 font-label-caps text-on-surface-variant uppercase tracking-wider text-xs cursor-pointer select-none"),
                     html.Div(
-                        className="overflow-x-auto",
+                        style={"minWidth": "950px"},
                         children=[
                             html.Div(
-                                className="grid gap-2 px-4 py-3 font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider border-b border-outline-variant",
-                                style={"gridTemplateColumns": f"repeat({len(sim_cols)}, minmax(0, 1fr))", "minWidth": "900px"},
+                                className="grid gap-2 px-4 py-3 font-label-caps text-[10px] text-on-surface-variant uppercase tracking-wider border-b border-outline-variant break-words",
+                                style={"gridTemplateColumns": sim_tpl},
                                 children=[html.Div(c) for c in sim_cols],
                             )
                         ] + rows,
@@ -578,6 +626,73 @@ def velocity_simulation(ledger_csv, risk_pct, ai_threshold=None, title="₹10L V
             tiles,
         ] + ledger_section
     )
+
+
+def _tab_legacy():
+    return [
+        _section_header("🔬 Phase 1: Institutional Screener (Raw ATW Unverified)"),
+        legacy_table(),
+    ]
+
+
+def _tab_alpha():
+    return [
+        _section_header("Path A: Alpha Markups", "#FFB300"),
+        alpha_table(),
+        _section_header("Trade Execution Log", "#F50057"),
+        completed_trades() or html.Div("No completed trades recorded yet.", className="p-4 font-body-md text-outline text-center"),
+        velocity_simulation(SBIA_LEDGER, risk_pct=0.003),
+    ]
+
+
+def _tab_flexgate():
+    return [
+        html.Div(
+            className="glass-panel rounded-2xl p-4 mt-6 mb-2 font-body-md",
+            style={"borderLeft": "3px solid #8ea2ff"},
+            children=[
+                html.Div("🔭 Path B: Base-Loading (FlexGate)", className="font-headline-sm text-[#8ea2ff] font-semibold mb-1"),
+                html.P("These signals survived the ICT Box anomalies (exactly 2 alerts in 10 days). Trend-Following Notice: No Fixed Profit Target. Use the Chandelier Exit.", className="text-on-surface-variant text-sm mb-0"),
+            ],
+        ),
+        flexgate_table(FLEXGATE_FILE, "Run calculate_active_signals.py to generate the FlexGate Watchlist.", "⚠️ No stocks passed the strict FlexGate logic today."),
+        velocity_simulation(FLEXGATE_LEDGER, risk_pct=0.002, ai_threshold=65.0, title="₹10L FlexGate Simulation Status"),
+    ]
+
+
+def _tab_flexgate2():
+    return [
+        html.Div(
+            className="glass-panel rounded-2xl p-4 mt-6 mb-2 font-body-md",
+            style={"borderLeft": "3px solid #e74c3c"},
+            children=[
+                html.Div("🤖 FlexGate 2.0 (ML Engine)", className="font-headline-sm text-[#e74c3c] font-semibold mb-1"),
+                html.P("These signals survived the ML Heuristic Bouncer (ATR > 3.5%) and scored ≥ 60% on the Random Forest engine.", className="text-on-surface-variant text-sm mb-0"),
+            ],
+        ),
+        flexgate_table(FLEXGATE2_FILE, "Run flexgate_2_scanner.py to generate the FlexGate 2.0 Watchlist.", "⚠️ No stocks passed the strict FlexGate 2.0 ML logic today."),
+        velocity_simulation(FLEXGATE2_LEDGER, risk_pct=0.002, ai_threshold=60.0, title="₹10L FlexGate 2.0 Simulation Status"),
+    ]
+
+
+TAB_BUILDERS = {
+    "legacy": _tab_legacy,
+    "alpha": _tab_alpha,
+    "flexgate": _tab_flexgate,
+    "flexgate2": _tab_flexgate2,
+}
+
+
+@dash.callback(
+    Output("engine-tab-content", "children"),
+    Input("engine-tabs", "value"),
+    prevent_initial_call=True,
+)
+def render_engine_tab(tab_value):
+    builder = TAB_BUILDERS.get(tab_value)
+    if builder is None:
+        return html.Div("Unknown engine tab.", className="glass-panel rounded-xl p-6 font-body-md text-outline text-center")
+    return builder()
 
 
 def layout():
@@ -603,69 +718,16 @@ def layout():
             ),
             dcc.Tabs(
                 id="engine-tabs",
+                value="legacy",
                 parent_className="w-full",
                 parent_style={"borderBottom": "none", "backgroundColor": "transparent"},
                 children=[
-                    dcc.Tab(
-                        label="🔬 Legacy Screener",
-                        value="legacy",
-                        style=TAB_STYLE,
-                        selected_style=TAB_STYLE_SELECTED,
-                        children=[
-                            _section_header("🔬 Phase 1: Institutional Screener (Raw ATW Unverified)"),
-                            legacy_table(),
-                        ],
-                    ),
-                    dcc.Tab(
-                        label="🏆 SBIA Alpha Engine (High-Velocity)",
-                        value="alpha",
-                        style=TAB_STYLE,
-                        selected_style=TAB_STYLE_SELECTED,
-                        children=[
-                            _section_header("Path A: Alpha Markups", "#FFB300"),
-                            alpha_table(),
-                            _section_header("Trade Execution Log", "#F50057"),
-                            completed_trades() or html.Div("No completed trades recorded yet.", className="p-4 font-body-md text-outline text-center"),
-                            velocity_simulation(SBIA_LEDGER, risk_pct=0.003),
-                        ],
-                    ),
-                    dcc.Tab(
-                        label="🔭 SBIA FlexGate Engine (Base-Loading)",
-                        value="flexgate",
-                        style=TAB_STYLE,
-                        selected_style=TAB_STYLE_SELECTED,
-                        children=[
-                            html.Div(
-                                className="glass-panel rounded-2xl p-4 mt-6 mb-2 font-body-md",
-                                style={"borderLeft": "3px solid #8ea2ff"},
-                                children=[
-                                    html.Div("🔭 Path B: Base-Loading (FlexGate)", className="font-headline-sm text-[#8ea2ff] font-semibold mb-1"),
-                                    html.P("These signals survived the ICT Box anomalies (exactly 2 alerts in 10 days). Trend-Following Notice: No Fixed Profit Target. Use the Chandelier Exit.", className="text-on-surface-variant text-sm mb-0"),
-                                ],
-                            ),
-                            flexgate_table(FLEXGATE_FILE, "Run calculate_active_signals.py to generate the FlexGate Watchlist.", "⚠️ No stocks passed the strict FlexGate logic today."),
-                            velocity_simulation(FLEXGATE_LEDGER, risk_pct=0.002, ai_threshold=65.0, title="₹10L FlexGate Simulation Status"),
-                        ],
-                    ),
-                    dcc.Tab(
-                        label="🤖 FlexGate 2.0 (ML Engine)",
-                        value="flexgate2",
-                        style=TAB_STYLE,
-                        selected_style=TAB_STYLE_SELECTED,
-                        children=[
-                            html.Div(
-                                className="glass-panel rounded-2xl p-4 mt-6 mb-2 font-body-md",
-                                style={"borderLeft": "3px solid #e74c3c"},
-                                children=[
-                                    html.Div("🤖 FlexGate 2.0 (ML Engine)", className="font-headline-sm text-[#e74c3c] font-semibold mb-1"),
-                                    html.P("These signals survived the ML Heuristic Bouncer (ATR > 3.5%) and scored ≥ 60% on the Random Forest engine.", className="text-on-surface-variant text-sm mb-0"),
-                                ],
-                            ),
-                            flexgate_table(FLEXGATE2_FILE, "Run flexgate_2_scanner.py to generate the FlexGate 2.0 Watchlist.", "⚠️ No stocks passed the strict FlexGate 2.0 ML logic today."),
-                            velocity_simulation(FLEXGATE2_LEDGER, risk_pct=0.002, ai_threshold=60.0, title="₹10L FlexGate 2.0 Simulation Status"),
-                        ],
-                    ),
+                    dcc.Tab(label="🔬 Legacy Screener", value="legacy", style=TAB_STYLE, selected_style=TAB_STYLE_SELECTED),
+                    dcc.Tab(label="🏆 SBIA Alpha Engine (High-Velocity)", value="alpha", style=TAB_STYLE, selected_style=TAB_STYLE_SELECTED),
+                    dcc.Tab(label="🔭 SBIA FlexGate Engine (Base-Loading)", value="flexgate", style=TAB_STYLE, selected_style=TAB_STYLE_SELECTED),
+                    dcc.Tab(label="🤖 FlexGate 2.0 (ML Engine)", value="flexgate2", style=TAB_STYLE, selected_style=TAB_STYLE_SELECTED),
                 ],
             ),
+            html.Div(id="engine-tab-content", children=_tab_legacy()),
         ],
     )

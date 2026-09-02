@@ -61,22 +61,9 @@ top_navbar = html.Header(
     style={"width": "100%", "flexShrink": "0"},
     className="hidden md:flex justify-between items-center px-margin-desktop sticky top-0 z-50 bg-surface/80 backdrop-blur-xl h-16 border-b border-outline-variant shadow-sm",
     children=[
-        html.Div(
-            className="flex-1 max-w-md",
-            children=[
-                html.Div(
-                    className="relative flex items-center h-full",
-                    children=[
-                        DashIconify(icon="material-symbols:temp-preferences-custom", width=20, height=20, className="absolute left-sm text-primary", style={"zIndex": "10"}),
-                        html.Div(
-                            "Ask AI to filter or command... ✨",
-                            style={"background": "transparent", "color": "#8b90a0", "width": "100%", "border": "1px solid #414754", "borderRadius": "9999px", "paddingLeft": "40px", "minHeight": "44px", "display": "flex", "alignItems": "center", "fontSize": "13px"},
-                            className="bg-black/40 pr-sm font-data-mono transition-all hover:border-primary/50 cursor-text"
-                        )
-                    ]
-                )
-            ]
-        ),
+        # Search/AI entry point is the floating Vikram bar (bottom center);
+        # this spacer keeps the right-hand icons pushed right.
+        html.Div(className="flex-1"),
         html.Div(
             className="flex items-center gap-md",
             children=[
@@ -110,12 +97,13 @@ app.layout = html.Div(
     children=[
         dcc.Store(id="sidebar-state", data={"collapsed": False}),
         sidebar,
-        # Floating Command Bar
+        # Floating Command Bar — opens the Vikram AI panel
         html.Div(
+            id="vikram-trigger",
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-full bg-surface-container-highest/90 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] cursor-pointer hover:bg-surface-container-highest transition-colors",
             children=[
                 DashIconify(icon="material-symbols:search", width=20, height=20, className="text-on-surface-variant"),
-                html.Span("Ask AI or search...", className="text-on-surface-variant font-body-md text-sm pr-12"),
+                html.Span("Ask Vikram — AI Analyst", className="text-on-surface-variant font-body-md text-sm pr-12"),
                 html.Div(
                     className="flex items-center gap-1",
                     children=[
@@ -125,6 +113,57 @@ app.layout = html.Div(
                 )
             ]
         ),
+        # Vikram AI Analyst slide-in panel (right side, hidden by default)
+        html.Aside(
+            id="vikram-panel",
+            className="fixed top-0 right-0 h-screen w-[400px] max-w-[95vw] z-[100] flex flex-col bg-surface-container-low/95 backdrop-blur-2xl border-l border-white/10 shadow-[0_0_60px_rgba(0,0,0,0.6)]",
+            style={"transform": "translateX(100%)", "transition": "transform 0.3s ease"},
+            children=[
+                html.Div(
+                    className="flex items-center justify-between px-4 py-3 border-b border-outline-variant",
+                    children=[
+                        html.Div(
+                            children=[
+                                html.Div("Vikram", className="font-headline-sm text-headline-sm text-primary"),
+                                html.P("AI Analyst — Institutional / Small Cap", className="font-label-caps text-label-caps text-outline whitespace-nowrap")
+                            ]
+                        ),
+                        html.Button(
+                            id="vikram-close",
+                            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/5 transition-colors text-on-surface-variant",
+                            children=[DashIconify(icon="material-symbols:close", width=20, height=20)]
+                        )
+                    ]
+                ),
+                html.Div(
+                    id="vikram-chat",
+                    className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3",
+                    children=[
+                        html.Div(
+                            "I'm Vikram — your portfolio-aware analyst. I can see your active positions and today's engine signals. Ask me about a stock from the scanners, your positions, or which mode (institutional / small-cap momentum) applies to a name.",
+                            className="self-start max-w-[95%] bg-white/5 border border-outline-variant/60 text-on-surface rounded-xl rounded-bl-sm px-3 py-2 text-sm font-body-md whitespace-pre-wrap leading-relaxed"
+                        )
+                    ]
+                ),
+                html.Div(
+                    className="flex gap-2 p-3 border-t border-outline-variant",
+                    children=[
+                        dcc.Input(
+                            id="vikram-input",
+                            type="text",
+                            placeholder="Ask about a stock or your positions...",
+                            className="flex-1 bg-black/40 border border-outline-variant rounded-lg px-3 font-data-mono text-sm text-on-surface placeholder:text-outline focus:border-primary/50 outline-none min-h-[44px]"
+                        ),
+                        html.Button(
+                            "Ask",
+                            id="vikram-send",
+                            className="bg-primary text-on-primary font-headline-sm text-headline-sm rounded-lg px-4 hover:bg-primary-fixed transition-colors min-h-[44px] active:scale-95"
+                        )
+                    ]
+                ),
+                dcc.Store(id="vikram-history", data=[]),
+            ]
+        ),
         html.Main(
             style={"gridColumn": "2 / 3", "display": "flex", "flexDirection": "column", "minWidth": "0", "overflow": "hidden"},
             children=[
@@ -132,7 +171,7 @@ app.layout = html.Div(
                 top_navbar,
                 html.Div(
                     style={"flex": "1", "overflowY": "auto"},
-                    className="p-margin-mobile md:p-margin-desktop pb-16",
+                    className="p-margin-mobile md:p-margin-desktop pb-24",
                     children=[
                         html.Div(
                             className="max-w-[1200px] mx-auto w-full",
@@ -202,6 +241,10 @@ def toggle_sidebar(n_clicks, state):
     new_title_style = {"display": "none"} if new_collapsed else {}
     
     return new_style, {"collapsed": new_collapsed}, new_icon, new_title_style
+
+# Registers the Vikram AI Analyst chat callbacks (⌘K bar -> slide-in panel).
+# Underscore prefix keeps this module out of the Dash pages registry.
+import dash_pages._vikram_callback  # noqa: E402, F401
 
 if __name__ == '__main__':
     app.run(debug=os.environ.get("DASH_DEBUG") == "1", port=8050)

@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc
+from dash import html, dcc, Input, Output
 import pandas as pd
 import os
 from functools import lru_cache
@@ -22,110 +22,170 @@ def load_universe_stats():
     except Exception:
         return FALLBACK_TOTAL_SCANNED, FALLBACK_NSE, FALLBACK_BSE, None
 
-def layout():
-    data_path = os.path.join("data", "active_signals_ranked.csv")
-    total_scanned, nse_count, bse_count, as_of = load_universe_stats()
-    as_of_str = as_of.strftime("%d %b %Y") if as_of is not None else "—"
-    active_signals = 0
-    signal_rows = []
-    
-    if os.path.exists(data_path):
-        try:
-            df = pd.read_csv(data_path)
-            active_signals = len(df)
-            
-            # Take top 10 for dashboard preview
-            for i, row in df.head(10).iterrows():
-                sym = str(row.get("SYMBOL", "N/A"))
-                exch = str(row.get("EXCHANGE", "N/A"))
-                try:
-                    close = float(row.get("CLOSE", 0))
-                except:
-                    close = 0.0
-                try:
-                    deliv_per = float(row.get("DELIV_PER", 0))
-                except:
-                    deliv_per = 0.0
-                try:
-                    deliv_turn = float(row.get("DELIVERY_TURNOVER", 0))
-                except:
-                    deliv_turn = 0.0
-                try:
-                    atw = float(row.get("ATW", 0))
-                except:
-                    atw = 0.0
-                
-                # Format turnover in Crores
-                if deliv_turn > 10000000:
-                    turnover_str = f"₹ {deliv_turn / 10000000:.2f}Cr"
-                else:
-                    turnover_str = f"₹ {deliv_turn:,.0f}"
 
-                # Exchange badge styling
-                badge_bg = "bg-[#0070f3]/20 text-[#0070f3] border-[#0070f3]/30" if exch.upper() == "NSE" else "bg-[#34d399]/20 text-[#34d399] border-[#34d399]/30"
-                
-                signal_rows.append(html.Div(
-                    className="glass-panel p-4 rounded-xl mb-3 flex flex-wrap items-center justify-between gap-4 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 cursor-pointer group relative z-10 hover:z-20",
+@lru_cache(maxsize=1)
+def load_t2t_map():
+    """SYMBOL -> EVER_100_DELIV from the live universe file.
+
+    The ranked signals CSV does not populate EVER_100_DELIV (all NaN), so the
+    T2T status is cross-referenced from combined_dashboard_live.csv.
+    """
+    try:
+        df = pd.read_csv(os.path.join("data", "combined_dashboard_live.csv"), usecols=["SYMBOL", "EVER_100_DELIV"])
+        return dict(zip(df["SYMBOL"], df["EVER_100_DELIV"]))
+    except Exception:
+        return {}
+
+
+def load_latest_signals():
+    """Read active_signals_ranked.csv and keep ONLY the latest date's signals.
+
+    The CSV pools the last 30 days of signals (calculate_active_signals.py);
+    without this filter the dashboard dumps the whole history as 'today'.
+    """
+    path = os.path.join("data", "active_signals_ranked.csv")
+    if not os.path.exists(path):
+        return pd.DataFrame(), None
+    try:
+        df = pd.read_csv(path)
+    except Exception:
+        return pd.DataFrame(), None
+    if "DATE" in df.columns:
+        dates = pd.to_datetime(df["DATE"], errors="coerce")
+        if dates.notna().any():
+            latest = dates.max()
+            return df[dates == latest].copy(), latest
+    return df, None
+
+
+def format_turnover(deliv_turn):
+    """Consistent Indian formatting: Crores / Lakhs / raw rupees."""
+    if deliv_turn >= 10000000:
+        return f"₹ {deliv_turn / 10000000:.2f}Cr"
+    if deliv_turn >= 100000:
+        return f"₹ {deliv_turn / 100000:.2f}L"
+    return f"₹ {deliv_turn:,.0f}"
+
+
+def build_signal_rows(df):
+    """Render the top-10 signal cards for the dashboard preview."""
+    rows = []
+    for i, row in df.head(10).iterrows():
+        sym = str(row.get("SYMBOL", "N/A"))
+        exch = str(row.get("EXCHANGE", "N/A"))
+        try:
+            close = float(row.get("CLOSE", 0))
+        except Exception:
+            close = 0.0
+        try:
+            deliv_per = float(row.get("DELIV_PER", 0))
+        except Exception:
+            deliv_per = 0.0
+        try:
+            deliv_turn = float(row.get("DELIVERY_TURNOVER", 0))
+        except Exception:
+            deliv_turn = 0.0
+        try:
+            atw = float(row.get("ATW", 0))
+        except Exception:
+            atw = 0.0
+
+        turnover_str = format_turnover(deliv_turn)
+
+        # Exchange badge styling
+        badge_bg = "bg-[#0070f3]/20 text-[#0070f3] border-[#0070f3]/30" if exch.upper() == "NSE" else "bg-[#34d399]/20 text-[#34d399] border-[#34d399]/30"
+
+        rows.append(html.Div(
+            className="glass-panel p-4 rounded-xl mb-3 flex flex-wrap items-center justify-between gap-4 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 cursor-pointer group relative z-10 hover:z-20",
+            children=[
+                # Left side: Symbol & Exchange
+                html.Div(
+                    className="flex items-center gap-4 min-w-[150px]",
                     children=[
-                        # Left side: Symbol & Exchange
+                        html.Span(className="w-2.5 h-2.5 rounded-full bg-primary inline-block shadow-[0_0_8px_rgba(90,240,179,0.8)]"),
                         html.Div(
-                            className="flex items-center gap-4 min-w-[150px]",
                             children=[
-                                html.Span(className="w-2.5 h-2.5 rounded-full bg-primary inline-block shadow-[0_0_8px_rgba(90,240,179,0.8)]"),
-                                html.Div(
-                                    children=[
-                                        html.Div(sym, className="font-headline-sm text-lg font-semibold text-on-surface group-hover:text-primary transition-colors"),
-                                        html.Div(exch, className=f"text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border {badge_bg} inline-block mt-1")
-                                    ]
-                                )
-                            ]
-                        ),
-                        # Middle: Micro-chart (Sparkline representation)
-                        html.Div(
-                            className="hidden md:flex flex-1 max-w-[120px] items-center gap-2",
-                            children=[
-                                html.Div("CLOSE", className="text-[10px] text-on-surface-variant font-label-caps"),
-                                html.Div(f"{close:,.2f}", className="font-data-md text-on-surface font-medium"),
-                                # Fake sparkline
-                                html.Div(
-                                    className="flex items-end gap-0.5 h-6",
-                                    children=[
-                                        html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[30%]"),
-                                        html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[50%]"),
-                                        html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[40%]"),
-                                        html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[80%]"),
-                                        html.Div(className="w-1 bg-primary rounded-t-sm h-[100%] shadow-[0_0_4px_rgba(90,240,179,0.8)]"),
-                                    ]
-                                )
-                            ]
-                        ),
-                        # Right side: Stats
-                        html.Div(
-                            className="flex items-center gap-6",
-                            children=[
-                                html.Div(
-                                    className="flex flex-col text-right hidden sm:flex",
-                                    children=[
-                                        html.Span("DELIVERY", className="text-[10px] text-on-surface-variant font-label-caps"),
-                                        html.Span(f"{deliv_per:.1f}%", className="font-data-md text-primary font-medium")
-                                    ]
-                                ),
-                                html.Div(
-                                    className="flex flex-col text-right",
-                                    children=[
-                                        html.Span("TURNOVER", className="text-[10px] text-on-surface-variant font-label-caps"),
-                                        html.Span(turnover_str, className="font-data-md text-on-surface font-medium")
-                                    ]
-                                ),
-                                html.Span("arrow_drop_down", className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors")
+                                html.Div(sym, className="font-headline-sm text-lg font-semibold text-on-surface group-hover:text-primary transition-colors"),
+                                html.Div(exch, className=f"text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border {badge_bg} inline-block mt-1")
                             ]
                         )
                     ]
-                ))
-        except Exception as e:
-            signal_rows.append(html.Div(f"Error loading data: {e}", className="p-4 text-error text-center glass-panel rounded-xl"))
+                ),
+                # Middle: Micro-chart (Sparkline representation)
+                html.Div(
+                    className="hidden md:flex flex-1 max-w-[120px] items-center gap-2",
+                    children=[
+                        html.Div("CLOSE", className="text-[10px] text-on-surface-variant font-label-caps"),
+                        html.Div(f"{close:,.2f}", className="font-data-md text-on-surface font-medium"),
+                        # Fake sparkline
+                        html.Div(
+                            className="flex items-end gap-0.5 h-6",
+                            children=[
+                                html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[30%]"),
+                                html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[50%]"),
+                                html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[40%]"),
+                                html.Div(className="w-1 bg-on-surface-variant/40 rounded-t-sm h-[80%]"),
+                                html.Div(className="w-1 bg-primary rounded-t-sm h-[100%] shadow-[0_0_4px_rgba(90,240,179,0.8)]"),
+                            ]
+                        )
+                    ]
+                ),
+                # Right side: Stats
+                html.Div(
+                    className="flex items-center gap-6",
+                    children=[
+                        html.Div(
+                            className="flex flex-col text-right hidden sm:flex",
+                            children=[
+                                html.Span("DELIVERY", className="text-[10px] text-on-surface-variant font-label-caps"),
+                                html.Span(f"{deliv_per:.1f}%", className="font-data-md text-primary font-medium")
+                            ]
+                        ),
+                        html.Div(
+                            className="flex flex-col text-right",
+                            children=[
+                                html.Span("TURNOVER", className="text-[10px] text-on-surface-variant font-label-caps"),
+                                html.Span(turnover_str, className="font-data-md text-on-surface font-medium")
+                            ]
+                        ),
+                        html.Span("arrow_drop_down", className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors")
+                    ]
+                )
+            ]
+        ))
+    return rows
+
+def _filter_t2t(df, hide_t2t):
+    """Filter T2T (100% delivery) stocks. Default ON — Streamlit parity.
+
+    T2T status comes from the live universe map since the ranked CSV leaves
+    EVER_100_DELIV as NaN. Unknown symbols are kept (only *known* T2T hidden).
+    """
+    if not hide_t2t:
+        return df
+    t2t_map = load_t2t_map()
+    if not t2t_map:
+        return df
+    mask = df["SYMBOL"].map(lambda s: t2t_map.get(s) is True)
+    return df[~mask]
+
+
+def layout():
+    total_scanned, nse_count, bse_count, as_of = load_universe_stats()
+    as_of_str = as_of.strftime("%d %b %Y") if as_of is not None else "—"
+
+    df_latest, latest_date = load_latest_signals()
+    signals_asof = latest_date.strftime("%d %b %Y") if latest_date is not None else "—"
+
+    if df_latest.empty:
+        active_signals = 0
+        signal_rows = [html.Div("No active signals today.", className="p-4 font-body-md text-outline text-center glass-panel rounded-xl")]
     else:
-        signal_rows.append(html.Div("No active signals today.", className="p-4 font-body-md text-outline text-center glass-panel rounded-xl"))
+        df_display = _filter_t2t(df_latest, hide_t2t=True)
+        active_signals = len(df_display)
+        signal_rows = build_signal_rows(df_display)
+        if active_signals == 0:
+            signal_rows = [html.Div("All of today's signals are T2T (100% delivery) — toggle 'Hide T2T' off to view them.", className="p-4 font-body-md text-outline text-center glass-panel rounded-xl")]
 
     return html.Div(
         className="flex flex-col w-full px-[24px] py-[24px] max-w-[1600px] mx-auto",
@@ -175,10 +235,11 @@ def layout():
                                                     html.Div(
                                                         className="flex items-baseline gap-2 mt-2",
                                                         children=[
-                                                            html.Span(str(active_signals), className="font-display-lg text-[64px] font-bold text-primary leading-none tracking-tighter animate-number-roll"),
+                                                            html.Span(str(active_signals), id="signals-count", className="font-display-lg text-[64px] font-bold text-primary leading-none tracking-tighter animate-number-roll"),
                                                             html.Span("Signals Passing", className="font-label-sm text-on-surface-variant uppercase tracking-wider")
                                                         ]
-                                                    )
+                                                    ),
+                                                    html.Div(f"As of {signals_asof} (signals file)", className="text-[10px] text-outline mt-2")
                                                 ]
                                             ),
                                             html.Div(
@@ -190,17 +251,18 @@ def layout():
                                                             id="toggle",
                                                             className="relative inline-block w-12 align-middle select-none transition duration-200 ease-in cursor-pointer",
                                                             children=[
-                                                                html.Div(id="toggle-knob", className="absolute block w-6 h-6 rounded-full bg-surface-container-highest border-2 border-outline-variant z-10 transition-all duration-300 left-0"),
-                                                                html.Div(id="toggle-bg", className="block overflow-hidden h-6 rounded-full bg-surface-container transition-colors duration-300")
+                                                                html.Div(id="toggle-knob", className="absolute block w-6 h-6 rounded-full bg-surface-container-highest border-2 border-primary z-10 transition-all duration-300 left-6"),
+                                                                html.Div(id="toggle-bg", className="block overflow-hidden h-6 rounded-full bg-primary/40 transition-colors duration-300")
                                                             ]
                                                         )
                                                     )
                                                 ]
-                                            )
+                                            ),
                                         ]
                                     ),
                                     # Visual Data Grid
                                     html.Div(
+                                        id="signals-grid",
                                         className="flex flex-col z-10 mt-2",
                                         children=signal_rows
                                     )
@@ -270,3 +332,38 @@ def layout():
             )
         ]
     )
+
+
+_KNOB_ON = "absolute block w-6 h-6 rounded-full bg-surface-container-highest border-2 border-primary z-10 transition-all duration-300 left-6"
+_KNOB_OFF = "absolute block w-6 h-6 rounded-full bg-surface-container-highest border-2 border-outline-variant z-10 transition-all duration-300 left-0"
+_BG_ON = "block overflow-hidden h-6 rounded-full bg-primary/40 transition-colors duration-300"
+_BG_OFF = "block overflow-hidden h-6 rounded-full bg-surface-container transition-colors duration-300"
+
+_EMPTY_MSG = "No active signals today."
+_ALL_T2T_MSG = "All of today's signals are T2T (100% delivery) — toggle 'Hide T2T' off to view them."
+
+
+@dash.callback(
+    Output("signals-count", "children"),
+    Output("signals-grid", "children"),
+    Output("toggle-knob", "className"),
+    Output("toggle-bg", "className"),
+    Input("toggle", "n_clicks"),
+    prevent_initial_call=True,
+)
+def toggle_t2t_filter(n_clicks):
+    """Hide T2T is ON by default (Streamlit parity). Odd clicks turn it OFF."""
+    hide_t2t = (n_clicks % 2 == 0)
+    df_latest, _ = load_latest_signals()
+    if df_latest.empty:
+        count, rows = 0, [html.Div(_EMPTY_MSG, className="p-4 font-body-md text-outline text-center glass-panel rounded-xl")]
+    else:
+        df_display = _filter_t2t(df_latest, hide_t2t)
+        count = len(df_display)
+        if count == 0:
+            rows = [html.Div(_ALL_T2T_MSG, className="p-4 font-body-md text-outline text-center glass-panel rounded-xl")]
+        else:
+            rows = build_signal_rows(df_display)
+    knob = _KNOB_ON if hide_t2t else _KNOB_OFF
+    bg = _BG_ON if hide_t2t else _BG_OFF
+    return str(count), rows, knob, bg
