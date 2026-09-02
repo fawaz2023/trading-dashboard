@@ -1,0 +1,11 @@
+{
+  "auto-context": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "python scripts/generate_context.py",
+        "timeout": 15
+      }
+    ]
+  }
+}
