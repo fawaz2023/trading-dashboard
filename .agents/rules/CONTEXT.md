@@ -4,16 +4,16 @@
 
 
 **Current Working Set (trading_dashboard):**
-- `trading_dashboard/watchlist\active_watchlist.csv`
+- `trading_dashboard/ledger_manager.py`
 - `trading_dashboard/AGENTS.md`
+- `trading_dashboard/dash_pages\_vikram_callback.py`
+- `trading_dashboard/watchlist\active_watchlist.csv`
+- `trading_dashboard/conviction_scorer.py`
+- `trading_dashboard/dash_pages\dashboard.py`
+- `trading_dashboard/fundamental_fetcher.py`
+- `trading_dashboard/dash_app_v2.py`
+- `trading_dashboard/dash_pages\watchlist.py`
 - `trading_dashboard/dash_pages\institutional_signals.py`
-- `trading_dashboard/KIMI_K3_AUDIT_PROMPT.md`
-- `trading_dashboard/auto_push_github.bat`
-- `trading_dashboard/auto_update_daily.bat`
-- `trading_dashboard/dashboard_full.py`
-- `trading_dashboard/review_ledger_post_repair.py`
-- `trading_dashboard/run_dash.bat`
-- `trading_dashboard/run.bat`
 
 **Constraints for Today:**
 - Do NOT hallucinate variables or schemas. Use Dynamic Schema Discovery.

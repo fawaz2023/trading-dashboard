@@ -4,6 +4,9 @@ import pandas as pd
 import os
 from functools import lru_cache
 
+from fundamental_fetcher import FundamentalFetcher, CACHE_PATH as FUND_CACHE_PATH
+from conviction_scorer import ConvictionScorer
+
 dash.register_page(__name__, path='/', name='Dashboard', title='Pro Spike - Dashboard')
 
 FALLBACK_TOTAL_SCANNED = 5518
@@ -67,6 +70,77 @@ def format_turnover(deliv_turn):
     return f"₹ {deliv_turn:,.0f}"
 
 
+_fetcher = FundamentalFetcher()
+_scorer = ConvictionScorer()
+
+_CLASS_PILL = {
+    "S": "bg-[#e74c3c]/15 text-[#e74c3c] border-[#e74c3c]/30",
+    "M": "bg-[#FFB300]/15 text-[#FFB300] border-[#FFB300]/30",
+    "L": "bg-[#0070f3]/15 text-[#0070f3] border-[#0070f3]/30",
+    "U": "bg-white/5 text-on-surface-variant border-outline-variant/50",
+}
+_CLASS_TITLE = {
+    "S": "Small cap (<₹500 Cr mcap) — momentum sizing, Tier B vetoes apply",
+    "M": "Mid cap (₹500–10,000 Cr mcap) — hybrid mode, full conviction score",
+    "L": "Large cap (>₹10,000 Cr mcap) — rebalancing disclaimer, no score",
+    "U": "Fundamentals unavailable — screener.in fetch failed",
+}
+
+
+@lru_cache(maxsize=64)
+def _signal_badges(symbol, cache_mtime):
+    """Class + conviction + veto badges for a signal card.
+
+    cache_mtime (mtime of data/fundamental_cache.json) keys the lru cache so
+    refreshed fundamentals produce fresh scores within a server session.
+    """
+    try:
+        fund = _fetcher.fetch(symbol)
+        res = _scorer.score(fund)
+    except Exception:
+        fund, res = {}, None
+    if res is None:
+        res = {"stock_class": "U", "veto": False, "score": None,
+               "rating": "FUNDAMENTALS_UNAVAILABLE", "display_badge": "❓ Fundamentals unavailable",
+               "veto_reasons": []}
+    cls = res.get("stock_class", "U")
+    badges = [
+        html.Span(
+            f"[{cls}]",
+            title=_CLASS_TITLE.get(cls, ""),
+            className=f"text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded-full border {_CLASS_PILL.get(cls, _CLASS_PILL['U'])}",
+        )
+    ]
+    if res.get("veto"):
+        reason = (res.get("veto_reasons") or ["fundamental veto"])[0]
+        badges.append(html.Span(
+            f"🚫 VETO: {reason}",
+            className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#e74c3c]/20 text-[#ff6b6b] border border-[#e74c3c]/40",
+        ))
+        return badges
+    display = res.get("display_badge") or "❓ Fundamentals unavailable"
+    color = {
+        "HIGH_CONVICTION": "text-[#2ecc71] border-[#2ecc71]/40 bg-[#2ecc71]/10",
+        "MODERATE": "text-on-surface-variant border-outline-variant/60 bg-white/5",
+        "LOW": "text-[#FFB300] border-[#FFB300]/40 bg-[#FFB300]/10",
+        "LARGE_CAP_DISCLAIMER": "text-[#FFB300] border-[#FFB300]/40 bg-[#FFB300]/10",
+        "FUNDAMENTALS_UNAVAILABLE": "text-on-surface-variant border-outline-variant/60 bg-white/5",
+    }.get(res.get("rating"), "text-on-surface-variant border-outline-variant/60 bg-white/5")
+    badges.append(html.Span(
+        display,
+        className=f"text-[9px] font-semibold px-1.5 py-0.5 rounded-full border {color}",
+    ))
+    return badges
+
+
+def _badges_for(symbol):
+    try:
+        mtime = os.path.getmtime(FUND_CACHE_PATH)
+    except OSError:
+        mtime = 0
+    return _signal_badges(str(symbol).upper(), mtime)
+
+
 def build_signal_rows(df):
     """Render the top-10 signal cards for the dashboard preview."""
     rows = []
@@ -106,7 +180,8 @@ def build_signal_rows(df):
                         html.Div(
                             children=[
                                 html.Div(sym, className="font-headline-sm text-lg font-semibold text-on-surface group-hover:text-primary transition-colors"),
-                                html.Div(exch, className=f"text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border {badge_bg} inline-block mt-1")
+                                html.Div(exch, className=f"text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border {badge_bg} inline-block mt-1"),
+                                html.Div(_badges_for(sym), className="flex items-center gap-1.5 mt-1.5 flex-wrap"),
                             ]
                         )
                     ]

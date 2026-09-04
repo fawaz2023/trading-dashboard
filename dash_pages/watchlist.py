@@ -190,7 +190,6 @@ def layout():
                                 value=None,
                                 placeholder="Type symbol or scanner name...",
                                 className="font-data-md",
-                                style={"color": "#111"},
                             ),
                         ]
                     ),
@@ -203,7 +202,7 @@ def layout():
                                 type="number",
                                 value=0,
                                 step=0.05,
-                                className="glass-panel rounded-lg px-3 py-2 font-data-md text-on-surface w-32",
+                                className="glass-panel bg-transparent rounded-lg px-3 py-2 font-data-md text-on-surface w-32 focus:ring-0 focus:outline-none outline-none appearance-none",
                             ),
                         ]
                     ),

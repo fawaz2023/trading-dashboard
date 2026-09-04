@@ -290,3 +290,270 @@ details.glass-panel .accordion-content {
     display: inline-block;
     animation: number-roll 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+/* dcc.Dropdown Dark Mode Fixes */
+.Select-control {
+    background-color: var(--bg-surface) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: 8px !important;
+    color: var(--text-primary) !important;
+}
+.Select-control:hover {
+    border-color: var(--accent-emerald) !important;
+}
+.Select.is-focused > .Select-control {
+    border-color: var(--accent-emerald) !important;
+    box-shadow: 0 0 0 1px var(--accent-emerald) !important;
+}
+.Select-menu-outer {
+    background-color: var(--bg-surface) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: 8px !important;
+    margin-top: 4px !important;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5) !important;
+}
+.Select-menu {
+    max-height: 250px !important;
+}
+.Select-option {
+    background-color: transparent !important;
+    color: var(--text-primary) !important;
+    padding: 10px 12px !important;
+    font-family: 'Geist', sans-serif !important;
+}
+.Select-option.is-focused {
+    background-color: rgba(52, 211, 153, 0.1) !important;
+    color: var(--accent-emerald) !important;
+}
+.Select-option.is-selected {
+    background-color: rgba(52, 211, 153, 0.2) !important;
+    color: var(--accent-emerald) !important;
+}
+.Select-placeholder {
+    color: var(--text-muted) !important;
+}
+.Select-value-label {
+    color: var(--text-primary) !important;
+}
+.Select-input > input {
+    color: var(--text-primary) !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+.Select-input > input:focus {
+    box-shadow: none !important;
+    outline: none !important;
+    border: none !important;
+    --tw-ring-shadow: 0 0 transparent !important;
+}
+
+/* ============================================================
+   VIKRAM AI PANEL — thinking loader
+   ============================================================ */
+
+.vikram-dots {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 14px;
+}
+
+.vikram-dots span {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent-emerald);
+    animation: vikram-dot-bounce 1.2s infinite ease-in-out;
+}
+
+.vikram-dots span:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.vikram-dots span:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+@keyframes vikram-dot-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-6px); opacity: 1; box-shadow: 0 0 8px rgba(52, 211, 153, 0.8); }
+}
+
+/* Rotating status lines */
+.vikram-status {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+    min-height: 18px;
+}
+
+.vikram-status div {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    opacity: 0;
+    animation: vikram-status-cycle 8s infinite;
+}
+
+.vikram-status div:nth-child(1) { animation-delay: 0s; }
+.vikram-status div:nth-child(2) { animation-delay: 2s; }
+.vikram-status div:nth-child(3) { animation-delay: 4s; }
+.vikram-status div:nth-child(4) { animation-delay: 6s; }
+
+@keyframes vikram-status-cycle {
+    0%   { opacity: 0; transform: translateY(4px); }
+    4%   { opacity: 1; transform: translateY(0); }
+    22%  { opacity: 1; }
+    26%  { opacity: 0; transform: translateY(-4px); }
+    100% { opacity: 0; }
+}
+
+/* Scanning shimmer bar */
+.vikram-loader-bar {
+    position: relative;
+    height: 3px;
+    margin-top: 10px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+}
+
+.vikram-loader-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -40%;
+    width: 40%;
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, transparent, var(--accent-emerald), transparent);
+    animation: vikram-bar-scan 1.6s infinite ease-in-out;
+}
+
+@keyframes vikram-bar-scan {
+    0%   { left: -40%; }
+    100% { left: 100%; }
+}
+
+/* ============================================================
+   VIKRAM AI PANEL — rich markdown answer typography
+   ============================================================ */
+
+.vikram-markdown {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-primary);
+    overflow-wrap: break-word;
+}
+
+.vikram-markdown h1,
+.vikram-markdown h2,
+.vikram-markdown h3,
+.vikram-markdown h4 {
+    font-family: 'Geist', sans-serif;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.35;
+    margin: 14px 0 6px;
+    letter-spacing: 0.01em;
+}
+
+.vikram-markdown h1 { font-size: 16px; }
+.vikram-markdown h2 { font-size: 15px; }
+.vikram-markdown h3 {
+    font-size: 13px;
+    color: var(--accent-emerald);
+    text-transform: none;
+}
+.vikram-markdown h4 { font-size: 12.5px; color: var(--text-muted); }
+
+.vikram-markdown h1:first-child,
+.vikram-markdown h2:first-child,
+.vikram-markdown h3:first-child {
+    margin-top: 2px;
+}
+
+.vikram-markdown p { margin: 8px 0; }
+
+.vikram-markdown ul,
+.vikram-markdown ol {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.vikram-markdown li { margin: 5px 0; }
+
+.vikram-markdown li::marker { color: var(--accent-emerald); }
+
+.vikram-markdown strong {
+    color: var(--text-primary);
+    font-weight: 650;
+}
+
+.vikram-markdown em { color: var(--text-muted); }
+
+.vikram-markdown hr {
+    border: none;
+    border-top: 1px solid var(--border-subtle);
+    margin: 12px 0;
+}
+
+.vikram-markdown code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--accent-emerald);
+}
+
+.vikram-markdown pre {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 10px 0;
+}
+
+.vikram-markdown pre code {
+    background: transparent;
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.vikram-markdown table {
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 12px;
+    width: 100%;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.vikram-markdown th,
+.vikram-markdown td {
+    border: 1px solid var(--border-subtle);
+    padding: 5px 9px;
+    text-align: left;
+}
+
+.vikram-markdown th {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.vikram-markdown blockquote {
+    border-left: 3px solid var(--accent-emerald);
+    padding-left: 10px;
+    margin: 8px 0;
+    color: var(--text-muted);
+}
+
+.vikram-markdown a {
+    color: var(--accent-emerald);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--accent-emerald);
+}

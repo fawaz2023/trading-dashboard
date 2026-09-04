@@ -346,17 +346,37 @@ def update_flexgate_ledger(flex_watchlist, latest_prices_df, ledger_path):
                     path_df = ticker_df[ticker_df.index.tz_localize(None) >= entry_dt].copy()
                     path_df = path_df.dropna(subset=['Close'])
                     
+                    # Dynamic Chandelier Exit Trailing Logic
+                    current_stop_loss = row['STOP_LOSS']
+                    highest_high = row['ENTRY_PRICE'] # Start highest_high at entry price
+                    
                     hit = False
                     for p_date, p_row in path_df.iterrows():
-                        if pd.notna(row['STOP_LOSS']) and p_row['Low'] <= row['STOP_LOSS']:
+                        # 1. Update Highest High
+                        if pd.notna(p_row['High']) and p_row['High'] > highest_high:
+                            highest_high = p_row['High']
+                            
+                        # 2. Calculate New Dynamic Stop Loss (3 ATRs below highest high)
+                        if pd.notna(row['ATR14']):
+                            new_sl = highest_high - (3.0 * row['ATR14'])
+                            # 3. Ratchet Logic: Only move SL up, never down
+                            if pd.isna(current_stop_loss) or new_sl > current_stop_loss:
+                                current_stop_loss = new_sl
+                                
+                        # 4. Check for Stop Loss Hit
+                        if pd.notna(current_stop_loss) and p_row['Low'] <= current_stop_loss:
                             ledger_df.at[idx, 'STATUS'] = 'HIT_SL'
                             ledger_df.at[idx, 'EXIT_DATE'] = p_date.tz_localize(None)
-                            ledger_df.at[idx, 'EXIT_PRICE'] = row['STOP_LOSS']
+                            ledger_df.at[idx, 'EXIT_PRICE'] = current_stop_loss
                             hit = True
                             break
                             
                     if hit:
                         continue
+                        
+                    # 5. If trade is still active, save the tightest stop loss back to ledger
+                    if not hit and pd.notna(current_stop_loss):
+                        ledger_df.at[idx, 'STOP_LOSS'] = current_stop_loss
                         
     active_ledger = ledger_df[ledger_df['STATUS'] == 'ACTIVE'].copy()
     active_keys = set(zip(active_ledger['SYMBOL'], pd.to_datetime(active_ledger['ENTRY_DATE'])))

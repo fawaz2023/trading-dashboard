@@ -9,7 +9,9 @@ app = Dash(
     pages_folder="dash_pages",
     suppress_callback_exceptions=True,
     external_scripts=[
-        {"src": "https://cdn.tailwindcss.com?plugins=forms,container-queries"}
+        # NOTE: no forms plugin — it forces light-theme form resets (white input
+        # backgrounds, default blue/purple focus rings) that fight the dark M3 theme.
+        {"src": "https://cdn.tailwindcss.com?plugins=container-queries"}
     ],
     external_stylesheets=[
         "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap",
@@ -152,7 +154,7 @@ app.layout = html.Div(
                             id="vikram-input",
                             type="text",
                             placeholder="Ask about a stock or your positions...",
-                            className="flex-1 bg-black/40 border border-outline-variant rounded-lg px-3 font-data-mono text-sm text-on-surface placeholder:text-outline focus:border-primary/50 outline-none min-h-[44px]"
+                            className="flex-1 bg-transparent border border-outline-variant rounded-lg px-3 font-data-mono text-sm text-on-surface placeholder:text-outline focus:border-primary focus:ring-0 focus:outline-none outline-none appearance-none min-h-[44px]"
                         ),
                         html.Button(
                             "Ask",
@@ -162,6 +164,7 @@ app.layout = html.Div(
                     ]
                 ),
                 dcc.Store(id="vikram-history", data=[]),
+                dcc.Store(id="vikram-pending", data=None),
             ]
         ),
         html.Main(

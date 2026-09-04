@@ -8,10 +8,13 @@ Every query is pre-loaded with the live portfolio context and today's engine
 signals, plus Vikram's dual-mode institutional/small-cap mental model.
 """
 import os
+import re
+import time
 
 import dash
-from dash import Input, Output, State, html, no_update
+from dash import Input, Output, State, html, dcc, no_update
 import pandas as pd
+from functools import lru_cache
 
 ACTIVE_WATCHLIST = os.path.join("watchlist", "active_watchlist.csv")
 ENGINE_FILES = [
@@ -22,18 +25,42 @@ ENGINE_FILES = [
 ]
 MAX_ENGINE_ROWS = 10
 MAX_HISTORY = 20
-MODEL_CANDIDATES = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"]
+MAX_LEDGER_TRADES = 25  # per engine, shown to Vikram for audits
+
+LEDGER_FILES = [
+    ("SBIA Alpha Engine", os.path.join("data", "sbia_ledger.csv")),
+    ("FlexGate Engine", os.path.join("data", "flexgate_ledger.csv")),
+    ("FlexGate 2.0 (ML Engine)", os.path.join("data", "flexgate2_ledger.csv")),
+]
 
 VIKRAM_SYSTEM_PROMPT = """You are Vikram Menon — a senior equity analyst with 22 years of experience
 in Indian capital markets (NSE/BSE). You have operated at both institutional
 fund level (deploying ₹500Cr+ in mid/large caps) and as a special situations
 analyst covering small cap momentum and operator-driven accumulation plays.
 
-This dual experience means you carry TWO distinct analytical modes and you
-switch between them automatically based on the stock's free float size.
+This dual experience means you classify every stock into THREE market-cap
+classes and apply the matching analytical framework. Classification comes
+from the injected data (market cap from screener.in), never from memory.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODE A — INSTITUTIONAL MODE (Free Float > ₹300 Cr)
+STOCK CLASSES — MARKET CAP, NOT FREE FLOAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- CLASS S (Small-Cap, mcap < ₹500 Cr): apply the SMALL-CAP MOMENTUM MODE
+  below. Tier B vetoes (pledge rising, FCF/PAT divergence) take ABSOLUTE
+  priority — check the injected veto status BEFORE any analysis.
+- CLASS M (Mid-Cap, mcap ₹500–10,000 Cr) — your primary target: apply the
+  HYBRID MODE — the institutional quality framework below for analysis
+  (quality + fraud checks are mandatory) with small-cap momentum sizing and
+  exits (smaller positions, trail the winner instead of fixed targets). In
+  your verdict, ALWAYS cite the injected CONVICTION SCORE for Class M stocks.
+- CLASS L (Large-Cap, mcap > ₹10,000 Cr): a delivery-signal on a large cap
+  is usually institutional portfolio rebalancing, NOT accumulation. Say so
+  explicitly: "Large-cap rebalancing signal — do not treat as accumulation
+  without further evidence" and apply no momentum framework. You may still
+  run a fundamentals view if asked.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MODE A — INSTITUTIONAL QUALITY FRAMEWORK (applies to Class M; Class L only if asked)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Apply this 9-point framework in order. If a stock fails early gates, say so
 immediately — don't soften it.
@@ -97,10 +124,10 @@ actually exit. Cash quality, float, and management behavior under stress
 compound into returns far more than any single ratio.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODE B — SMALL CAP MOMENTUM MODE (Free Float < ₹300 Cr)
+MODE B — SMALL CAP MOMENTUM MODE (Class S)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 When you detect a small cap with low free float, you do NOT eliminate it.
-You announce the mode switch explicitly, then apply these 6 signals.
+You announce the class explicitly, then apply these 6 signals.
 
 The mental model shift: low float is not a disqualifier — it is an
 AMPLIFIER. In a ₹50–150 Cr free float stock, even ₹10–20 Cr of real
@@ -165,20 +192,153 @@ ACTIVE POSITIONS:
 TODAY'S ENGINE SIGNALS:
 {ENGINE_SIGNALS}
 
+FUNDAMENTAL DATA (fetched from screener.in seconds before this query —
+use these figures, not your memory, for market cap class / promoter-DII-FII
+trends / pledge / OCF-PAT / operating leverage / RoICE / interest coverage /
+CONVICTION SCORE / veto status; free float is DERIVED as Market Cap x
+(1 - promoter %) and excludes pledge adjustments):
+{FUNDAMENTAL_DATA}
+
+SIMULATION LEDGERS (your own engine trade history — closed trades with
+entry/exit, per-engine aggregates; use these whenever the user asks to
+audit trades, find alpha leaks, or review engine performance):
+{SIMULATION_LEDGER}
+
+RISK ARCHITECTURE (the desk's actual rules — stress-test strategies
+against these when auditing):
+{RISK_ARCHITECTURE}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FORMATTING RULES (every answer is rendered as rich Markdown)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Structure: summary table FIRST (see MANDATORY VISUAL SUMMARY TABLE), then
+  short prose, then ONE bold **🎯 Bottom line:** sentence
+- Use ### headings with one emoji each; **bold** every key number and
+  verdict; bullets over paragraphs
+- Separate paragraphs with a BLANK line (single newlines do not render as
+  breaks)
+- Emojis: generously, at line starts to highlight key points — ✅ ⚠️ 🚫 🚀 🎯 📌
+  — never mid-sentence
+- Numbers always with units and periods (₹1,113 Cr, 0.38x, Jun 2026)
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RESPONSE RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Always state which mode you're applying and why
-- "From your data:" = facts from injected portfolio context
+- Your prose analysis must be short, punchy, and easy for everyday retail
+  investors to understand. Use emojis generously to highlight key points,
+  avoid overly dense jargon, and get straight to the point.
+- State the stock's CLASS (S/M/L) and market cap in the first prose line
+  after the table
+- "From your data:" = facts from injected context
 - "My view:" = your analysis and opinion
 - "FLAG:" = a risk the user must investigate before acting
 - Be direct and opinionated. You're a seasoned analyst, not a hedger.
-- Keep responses tight: 4–6 sentences unless the user asks for a deep dive
 - Never fabricate specific balance sheet figures, prices, or shareholding
   percentages you don't have. Say "I don't have the latest numbers on that
   — check Screener.in or BSE filing" instead
-- If a large-cap stock has low float → eliminate it cleanly and explain why
-- If a small-cap stock has low float → switch to Mode B and analyze positively
+- AUTOMATED Vetoes are HARD STOPS: if the injected data says a VETO is
+  active for a symbol, you do NOT give a buy view on it, full stop.
+- Class M prose must mention the injected CONVICTION SCORE's biggest
+  boosters and drags
+- Class L: the table's Fundamental Strength line IS the verdict — prose
+  reinforces the rebalancing disclaimer briefly
+- MANDATORY SEARCH RULE: for any question about DII/FII holdings, OCF/PAT,
+  pledge, promoter buying, dilution, recent results, or news, you MUST use
+  your Google Search tool FIRST and ground the answer in what it returns.
+  Saying "I don't have" for publicly available data without having searched
+  is a failure mode — search, then answer. If search returns nothing usable,
+  say exactly that
+- When asked to audit closed trades or find alpha leaks: skip the table,
+  go engine by engine through the SIMULATION LEDGERS with concrete numbers,
+  name specific symbols, and compare against the RISK ARCHITECTURE limits
+- Position sizing recommendation for S/M goes in the **🎯 Bottom line:**
+  sentence (S/M: momentum-sized, trailed; M adds quality gates; L: no
+  accumulation sizing)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANDATORY VISUAL SUMMARY TABLE (TOP OF RESPONSE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The VERY FIRST thing you output for ANY stock analysis MUST be the
+Fundamental Quality Gate table with scores and conviction — before any
+prose. There is NO Technical Trigger table anymore; do not output one.
+
+Format it EXACTLY like this (replace values with real data):
+
+### 📊 [SYMBOL] — Quality Scorecard
+
+**🏛️ Fundamental Quality Gate**
+
+| Parameter | Score | Signal |
+|-----------|-------|--------|
+| 🚀 Operating Leverage | 9 / 10 | 🔥 |
+| 💰 FCF Quality (OCF/PAT) | 10 / 10 | 🔥🔥 |
+| 📉 Promoter Pledge Trend | 7 / 10 | 🟢 |
+| 🏦 Interest Coverage | 5 / 10 | 🟢 |
+| 📊 RoICE | 8 / 10 | 🔥 |
+| 🚫 Veto Status | CLEAR | ✅ |
+
+**⚡ Overall Conviction: 74 / 100 — HIGH**
+**🎯 Mode B · Small-Cap · Trail above 20%, do not take fixed TP**
+
+---
+
+Then (and only then) a SHORT prose analysis (see PROSE RULES below).
+
+TABLE SCORING RULES:
+- Use the injected per-metric gate scores EXACTLY as given in
+  FUNDAMENTAL_DATA — do not recompute or adjust them. Use N/A / ⏳ when a
+  score was not injected. Never invent values.
+- Signal column emoji rules (applied to the injected scores):
+  - 🔥🔥 = exceptional (≥ 9/10)
+  - 🔥 = good (7–8.9 / 10)
+  - 🟢 = clean / adequate (5–6.9 / 10)
+  - ⚠️ = weak (3–4.9 / 10)
+  - 🚫 = veto / danger (< 3 or veto triggered)
+  - ⏳ = data not available
+- Veto Status: if any AUTOMATED VETO is active, show:
+  🚫 VETO ACTIVE — [reason]
+- The Overall Conviction score and rating come directly from the injected
+  CONVICTION SCORE, not from re-computing
+- Class S / M verdict line: **⚡ Overall Conviction: [score] / 100 — [rating]**
+  plus the class/sizing line (S: momentum-sized, trail; M: hybrid — quality
+  gates + momentum sizing)
+- Class L verdict lines (use the injected FUNDAMENTAL STRENGTH number, do
+  not recompute):
+  **⚡ Fundamental Strength: [score] / 100 — [rating]**
+  **⚖️ Large-Cap · Rebalancing signal, no accumulation sizing**
+
+WHEN TO SHOW THE TABLE:
+- EVERY stock analysis — Class S, Class M AND Class L. No exceptions. Table
+  first, prose second.
+- If the stock was identified by NAME rather than symbol (e.g. "indus
+  towers"), or FUNDAMENTAL_DATA has no entry for it: populate the table from
+  your Google Search results where possible, and use ⏳ for anything you
+  could not verify. Never guess.
+- If fundamentals are unavailable or all fields are N/A: show the table
+  headers with ⏳ in all cells and note: "Fundamental data unavailable —
+  table cannot be scored. Run a manual screener.in check."
+- Non-stock questions (portfolio audit, engine alpha, general education)
+  do not need the table.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROSE RULES — SHORT, PUNCHY, RETAIL-FRIENDLY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Your prose analysis must be short, punchy, and easy for everyday retail
+investors to understand. Use emojis generously to highlight key points,
+avoid overly dense jargon, and get straight to the point.
+
+- After the table: at most 5–8 short lines of prose, 1–2 sentences each,
+  separated by blank lines
+- Lead with the verdict, not the process. No long framework walkthroughs —
+  the table already carries the scores
+- Explain any necessary jargon in plain words in the same breath (e.g.
+  "OCF/PAT — is the cash real, not just accounting profit")
+- Use emoji line-starters to make key points scannable: ✅ strengths,
+  ⚠️ worries, 🚫 deal-breakers, 🎯 what to do next
+- End with ONE line: **🎯 Bottom line:** [one plain-English sentence with
+  your verdict and, for S/M, the position sizing]
+- Keep the analytical rigor — you still never fabricate numbers and still
+  flag what must be manually verified
 """
 
 
@@ -302,29 +462,365 @@ def build_engine_signals():
 
 
 # ---------------------------------------------------------------------------
-# Gemini client (lazy SDK import, model fallback)
+# Live fundamentals (shared FundamentalFetcher cache + ConvictionScorer)
 # ---------------------------------------------------------------------------
 
-_configured = False
+from conviction_scorer import ConvictionScorer, fundamental_strength
+from fundamental_fetcher import FundamentalFetcher
+
+_MAX_SCREENER_LOOKUPS = 2  # per query, keeps latency bounded
+_fetcher = FundamentalFetcher()
+_scorer = ConvictionScorer()
+
+# Uppercase words that are never stock symbols
+_SYMBOL_STOPWORDS = {
+    "AND", "FOR", "THE", "NOT", "NOW", "BUY", "SELL", "ADD", "EXIT", "HOLD",
+    "YES", "OK", "WHY", "HOW", "WHAT", "WHEN", "WHO", "NSE", "BSE", "TP",
+    "SL", "AI", "T2T", "CR", "FII", "DII", "ML", "NBFC", "ROE", "ROCE",
+    "ATR", "ICT", "EPS", "CMP", "LTP", "HDFC?", "SIM", "GDP", "INR", "USD",
+    "IPO", "QIP", "MCAP", "PE", "PB", "ETF", "NAV", "AUM", "ROICE", "OCF",
+    "PAT", "QOQ", "YOY", "VETO", "EOD", "FYI", "VIKRAM",
+}
+
+
+@lru_cache(maxsize=1)
+def _known_symbols():
+    """Symbols from portfolio + engine watchlists (cached per process)."""
+    syms = set()
+    for path in [ACTIVE_WATCHLIST] + [p for _, p in ENGINE_FILES]:
+        try:
+            df = pd.read_csv(path)
+            col = "SYMBOL" if "SYMBOL" in df.columns else ("symbol" if "symbol" in df.columns else None)
+            if col:
+                syms.update(str(s).strip().upper() for s in df[col].dropna())
+        except Exception:
+            continue
+    return syms
+
+
+def extract_query_symbols(question):
+    """Uppercase tokens that look like stock symbols; known ones first.
+
+    Falls back to screener.in's company-search API when no token looks like a
+    symbol but the question contains lowercase words (e.g. "indus towers").
+    """
+    tokens = re.findall(r"\b[A-Z][A-Z0-9&-]{2,19}\b", question or "")
+    seen = set()
+    candidates = []
+    for t in tokens:
+        t = t.rstrip("&-")
+        if t in _SYMBOL_STOPWORDS or t in seen or len(t) < 3:
+            continue
+        seen.add(t)
+        candidates.append(t)
+    known = _known_symbols()
+    ordered = [c for c in candidates if c in known] + [c for c in candidates if c not in known]
+    if ordered:
+        return ordered[:_MAX_SCREENER_LOOKUPS]
+
+    # No symbol-like token: try company-name search (>= 2 consecutive words)
+    _NAME_STOP = {"what", "about", "tell", "should", "would", "could", "think",
+                  "view", "analysis", "analyze", "analyse", "framework", "stock",
+                  "company", "share", "this", "that", "have", "does", "your",
+                  "full", "apply", "fired", "screener", "condition", "worth",
+                  "entering", "enter", "check", "look", "looks", "like"}
+    words = [w for w in re.findall(r"[A-Za-z][a-z]{2,}", question or "") if w not in _NAME_STOP]
+    if len(words) >= 2:
+        try:
+            import requests as _rq
+            r = _rq.get(
+                "https://www.screener.in/api/company/search/",
+                params={"q": " ".join(words[:3])},
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+                timeout=5,
+            )
+            if r.status_code == 200:
+                for hit in r.json()[:1]:
+                    m = re.search(r"/company/([A-Z0-9&-]+)/", hit.get("url", ""))
+                    if m:
+                        return [m.group(1)]
+        except Exception:
+            pass
+    return []
+
+
+def _pct(v, nd=2):
+    return f"{v:.{nd}f}%" if v is not None else "n/m"
+
+
+@lru_cache(maxsize=64)
+def _technical_trigger(symbol):
+    """Delivery-spike metrics for SYMBOL — today's watchlists first, then the
+    30-day ranked pool, then the full signal history (with its fired date).
+
+    Populates the summary table's Technical Trigger section for any stock that
+    has EVER fired a scanner, not just today's signals.
+    """
+    sym = str(symbol).upper().strip()
+
+    def _fnum(v):
+        try:
+            f = float(v)
+            return None if pd.isna(f) else f
+        except (TypeError, ValueError):
+            return None
+
+    def _fmt_row(r, source, date_val):
+        deliv = _fnum(r.get("DELIV_PER") if "DELIV_PER" in r.index else r.get("Delivery_Percent"))
+        turn = _fnum(r.get("DELIVERY_TURNOVER"))
+        atw = _fnum(r.get("ATW"))
+        tc = _fnum(r.get("TRIGGER_COUNT_30D"))
+        out = {
+            "deliv_per": f"{deliv:.1f}%" if deliv is not None else "N/A",
+            "deliv_turnover": "N/A",
+            "atw": "N/A",
+            "trigger_count": "N/A" if tc is None else f"{int(tc)}",
+            "source": source,
+            "fired_on": str(date_val)[:10] if date_val is not None else None,
+        }
+        if turn is not None:
+            out["deliv_turnover"] = f"₹{turn / 10000000:.2f}Cr" if turn >= 10000000 else f"₹{turn / 100000:.2f}L"
+        if atw is not None:
+            out["atw"] = f"₹{atw / 100000:.1f}L" if atw >= 100000 else f"₹{atw:,.0f}"
+        if out["atw"] == "N/A" and _fnum(r.get("Price")) is not None:
+            out["atw"] = "N/A"  # history file has Price, not ATW
+        return out
+
+    # Tier 1: today's engine watchlists (fullest metrics)
+    for _, path in ENGINE_FILES:
+        try:
+            df = pd.read_csv(path)
+        except Exception:
+            continue
+        if df.empty or "SYMBOL" not in df.columns:
+            continue
+        row = df[df["SYMBOL"].astype(str).str.upper() == sym]
+        if not row.empty:
+            r = row.iloc[0]
+            date_val = r.get("DATE") if "DATE" in row.columns else None
+            return _fmt_row(r, "today's engine watchlist", date_val)
+
+    # Tier 2: 30-day ranked pool (full metrics, older dates)
+    try:
+        df = pd.read_csv(os.path.join("data", "active_signals_ranked.csv"))
+        if "SYMBOL" in df.columns:
+            rows = df[df["SYMBOL"].astype(str).str.upper() == sym]
+            if not rows.empty:
+                r = rows.iloc[0]
+                return _fmt_row(r, "30-day signals pool", r.get("DATE"))
+    except Exception:
+        pass
+
+    # Tier 3: full signal history (delivery % only, with fired date)
+    try:
+        df = pd.read_csv(os.path.join("data", "signal_history.csv"))
+        if "Symbol" in df.columns:
+            rows = df[df["Symbol"].astype(str).str.upper() == sym]
+            if not rows.empty:
+                rows = rows.sort_values("Date", ascending=False)
+                r = rows.iloc[0]
+                out = _fmt_row(r, "signal history", r.get("Date"))
+                out["atw"] = "N/A"
+                out["trigger_count"] = "N/A"
+                return out
+    except Exception:
+        pass
+    return None
+
+
+def build_fundamental_context(question):
+    """Fundamentals + conviction score + veto status for up to 2 symbols
+    mentioned in the query (shared cache with the dashboard badges)."""
+    symbols = extract_query_symbols(question)
+    if not symbols:
+        return "(no live fundamental fetch was made for this query)"
+    lines = []
+    for sym in symbols:
+        try:
+            d = _fetcher.fetch(sym)
+            res = _scorer.score(d)
+        except Exception:
+            d, res = {}, {"stock_class": "U", "veto": False, "score": None,
+                          "rating": "FUNDAMENTALS_UNAVAILABLE", "display_badge": "❓ unavailable",
+                          "veto_reasons": [], "boosters": [], "drags": []}
+        if d.get("error"):
+            lines.append(f"- {sym}: FUNDAMENTALS FETCH FAILED — {d['error']}. Do NOT guess these numbers; say they need manual verification.")
+            continue
+        if res.get("veto"):
+            lines.append(f"⚠️ AUTOMATED VETO ACTIVE FOR {sym}: {'; '.join(res['veto_reasons'])}. Do not give a buy view.")
+        parts = [f"- {sym} ({d.get('name', sym)}) [CLASS {res['stock_class']}"]
+        if d.get("market_cap_cr") is not None:
+            parts.append(f"mcap ₹{d['market_cap_cr']:,.0f} Cr")
+        if d.get("free_float_cr") is not None:
+            parts.append(f"free float ≈ ₹{d['free_float_cr']:,.0f} Cr (derived, excl. pledge)")
+        if d.get("price") is not None:
+            parts.append(f"price ₹{d['price']:,.0f}")
+        parts.append("]")
+        lines.append(", ".join(parts))
+        detail = []
+        tech = _technical_trigger(sym)
+        if tech:
+            fired = f", fired on {tech['fired_on']}" if tech.get("fired_on") else ""
+            detail.append(
+                f"TECHNICAL TRIGGER (from {tech['source']}{fired} — use these for the "
+                f"summary table's Technical Trigger section): delivery {tech['deliv_per']}, "
+                f"delivery turnover {tech['deliv_turnover']}, avg trade worth {tech['atw']}, "
+                f"30d trigger count {tech['trigger_count']}"
+            )
+        if "promoter_trend" in d:
+            detail.append(f"Promoter trend: {d['promoter_trend']}")
+        if "dii_trend" in d:
+            detail.append(f"DII trend: {d['dii_trend']}")
+        if "fii_trend" in d:
+            detail.append(f"FII trend: {d['fii_trend']}")
+        if "pledge_trend" in d:
+            note = d.get("pledge_note", "")
+            detail.append(f"Pledge trend (4Q): {d['pledge_trend']} — direction {d.get('pledge_direction', '?')}{f' ({note})' if note else ''}")
+        if "fcf_pat_ratio" in d:
+            detail.append(f"OCF/PAT 3yr cumulative: {d['fcf_pat_ratio']}x (OCF 3yr {d.get('ocf_3yr_cr')} ₹Cr vs PAT 3yr {d.get('pat_3yr_cr')} ₹Cr)")
+        if "revenue_4q_growth" in d:
+            detail.append(f"Revenue growth (4Q YoY): {_pct(d['revenue_4q_growth'] * 100, 1)}")
+        if "ebit_4q_growth" in d:
+            detail.append(f"EBIT growth (4Q YoY): {_pct(d['ebit_4q_growth'] * 100, 1)}")
+        if "op_lev_ratio" in d:
+            detail.append(f"Operating leverage ratio: {d['op_lev_ratio']:.1f}x — INFLECTING: {d.get('op_lev_inflecting')}")
+        if "interest_coverage_trend" in d:
+            detail.append(f"Interest coverage: {d['interest_coverage_trend']} (recent avg {d.get('interest_coverage_recent', 'n/m')}x)")
+        if "roice_pct" in d:
+            detail.append(f"RoICE (3yr ΔEBIT/ΔCE): {_pct(d['roice_pct'], 1)}")
+        if "borrowings_cr" in d:
+            detail.append(f"Borrowings: ₹{d['borrowings_cr']:,.0f} Cr")
+        if detail:
+            lines.append("    " + "; ".join(detail))
+        verdict = [f"CONVICTION: {res.get('display_badge', 'n/a')} (rating {res.get('rating')}, score {res.get('score')})"]
+        if res.get("boosters"):
+            verdict.append("boosters: " + "; ".join(res["boosters"]))
+        if res.get("drags"):
+            verdict.append("drags: " + "; ".join(res["drags"]))
+        if res.get("stock_class") == "L":
+            fs = res.get("fundamental_score")
+            fr = res.get("fundamental_rating")
+            if fs is not None:
+                verdict.append(
+                    f"FUNDAMENTAL STRENGTH (fundamentals-only score for large-caps — "
+                    f"use this, do not recompute): {fs} / 100 ({fr})"
+                )
+            else:
+                verdict.append("FUNDAMENTAL STRENGTH: insufficient data")
+            gate = res.get("gate") or {}
+            if gate:
+                g = ", ".join(f"{k.replace('_', ' ').title()} {v}/10" for k, v in gate.items() if v is not None)
+                verdict.append(f"per-metric gate scores (use EXACTLY these in the table): {g}")
+        else:
+            gate = fundamental_strength(d)[0] if not d.get("error") else {}
+            if gate:
+                g = ", ".join(f"{k.replace('_', ' ').title()} {v}/10" for k, v in gate.items() if v is not None)
+                verdict.append(f"per-metric gate scores (use EXACTLY these in the table): {g}")
+        lines.append("    " + " | ".join(verdict))
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Simulation ledger + risk architecture context (engine audit)
+# ---------------------------------------------------------------------------
+
+def _trade_line(r):
+    sym = str(r.get("SYMBOL", "?"))
+    entry, exit_ = r.get("ENTRY_PRICE"), r.get("EXIT_PRICE")
+    status = str(r.get("STATUS", "?"))
+    ed, xd = r.get("ENTRY_DATE"), r.get("EXIT_DATE")
+    date_s = f"{str(ed)[:10]}→{str(xd)[:10]}" if pd.notna(xd) else f"{str(ed)[:10]}→open"
+    px_s = f"₹{_fmt_num(entry, 2)}→₹{_fmt_num(exit_, 2)}" if pd.notna(exit_) else f"₹{_fmt_num(entry, 2)}→open"
+    if pd.notna(entry) and pd.notna(exit_) and float(entry) > 0:
+        ret = (float(exit_) - float(entry)) / float(entry) * 100
+        ret_s = f"{ret:+.1f}%"
+    else:
+        ret_s = "-"
+    ai = r.get("ENTRY_AI_PROB")
+    ai_s = f", AI {float(ai):.0f}%" if pd.notna(ai) else ""
+    return f"- {sym} {date_s} {px_s} {status} {ret_s}{ai_s}"
+
+
+def build_ledger_context():
+    """Per-engine closed-trade history from the simulation ledgers."""
+    blocks = []
+    for name, path in LEDGER_FILES:
+        if not os.path.exists(path):
+            blocks.append(f"{name}: ledger file not found.")
+            continue
+        try:
+            df = pd.read_csv(path)
+        except Exception:
+            blocks.append(f"{name}: could not read ledger.")
+            continue
+        if df.empty or "STATUS" not in df.columns:
+            blocks.append(f"{name}: empty ledger.")
+            continue
+        closed = df[df["STATUS"] != "ACTIVE"]
+        counts = df["STATUS"].value_counts().to_dict()
+        n_tp = int(counts.get("HIT_TP", 0))
+        n_sl = int(counts.get("HIT_SL", 0))
+        n_ml = int(counts.get("MOMENTUM_LOST", 0))
+        decided = n_tp + n_sl + n_ml
+        win_rate = (n_tp / decided * 100) if decided else 0.0
+        header = (
+            f"{name}: {len(df)} total trades "
+            f"(ACTIVE {int(counts.get('ACTIVE', 0))}, HIT_TP {n_tp}, HIT_SL {n_sl}, "
+            f"MOMENTUM_LOST {n_ml}, SUSPENDED {int(counts.get('SUSPENDED', 0))}; "
+            f"simple win rate {win_rate:.0f}% = HIT_TP / (HIT_TP+HIT_SL+MOMENTUM_LOST))"
+        )
+        if "ENTRY_DATE" in closed.columns:
+            closed = closed.sort_values("ENTRY_DATE", ascending=False)
+        trades = "\n".join(_trade_line(r) for _, r in closed.head(MAX_LEDGER_TRADES).iterrows())
+        extra = f" (+{len(closed) - MAX_LEDGER_TRADES} older closed trades)" if len(closed) > MAX_LEDGER_TRADES else ""
+        blocks.append(f"{header}{extra}\n{trades}")
+    return "\n\n".join(blocks)
+
+
+def build_risk_architecture_context():
+    """Desk risk rules. Engine rules mirror the velocity-sim code; desk limits
+    are defaults the user should tune."""
+    return (
+        "Simulation capital: ₹10,00,000 (₹10L) per engine\n"
+        "Engine position sizing (from code): risk per trade = 0.3% of capital "
+        "(SBIA Alpha) / 0.2% (FlexGate, FlexGate 2.0); max position = 10% of "
+        "capital; NaN-SL fallback = flat 10% of capital\n"
+        "AI gates (from code): FlexGate ENTRY_AI_PROB ≥ 65%, FlexGate 2.0 ≥ 60%, "
+        "SBIA Alpha ungated\n"
+        "Desk limits (DEFAULTS — user should adjust): max open positions 10 per "
+        "engine, max portfolio drawdown 15%"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Gemini client (google-genai SDK, lazy import, Google Search grounding)
+# ---------------------------------------------------------------------------
+
+_client = None
 _working_model = None
+_working_search = None
+
+# gemini-2.5-flash and 2.5-flash-lite are retired (404) for current API keys;
+# updated to use gemini-3.5-flash-lite as recommended by the API error message.
+MODEL_CANDIDATES = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
 
 
 def _ensure_configured():
-    global _configured
-    if _configured:
+    global _client
+    if _client is not None:
         return None
     key = _get_api_key()
     if not key:
         return "GEMINI_API_KEY is not set. Add it to the .env file at the repo root (see .env.example)."
     try:
-        import google.generativeai as genai
+        from google import genai
+        from google.genai import types as genai_types
     except ImportError:
-        return "google-generativeai SDK is not installed. Run: venv\\Scripts\\pip install google-generativeai"
+        return "google-genai SDK is not installed. Run: venv\\Scripts\\pip install google-genai"
     try:
-        genai.configure(api_key=key)
+        _client = genai.Client(api_key=key, http_options=genai_types.HttpOptions(timeout=90_000))
     except Exception as e:
         return f"Could not configure Gemini: {e}"
-    _configured = True
     return None
 
 
@@ -339,49 +835,110 @@ def _sanitize_contents(history, question):
         if role not in ("user", "model"):
             role = "user"
         if contents and contents[-1]["role"] == role:
-            contents[-1]["parts"][0] += "\n" + text
+            contents[-1]["parts"][0]["text"] += "\n" + text
         else:
-            contents.append({"role": role, "parts": [text]})
+            contents.append({"role": role, "parts": [{"text": text}]})
     if contents and contents[0]["role"] != "user":
         contents = contents[1:]
-    contents.append({"role": "user", "parts": [question]})
+    contents.append({"role": "user", "parts": [{"text": question}]})
     return contents
 
 
-def ask_vikram(question, history):
-    """Send system prompt + session history + question to Gemini.
+def _generate(model_name, system_prompt, contents, use_search):
+    """One generate_content attempt. Returns (text, sources) or raises."""
+    from google.genai import types as genai_types
 
-    Returns (reply_text, error_message) — exactly one is None.
+    tools = [genai_types.Tool(google_search=genai_types.GoogleSearch())] if use_search else None
+    config = genai_types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        tools=tools,
+    )
+    resp = _client.models.generate_content(model=model_name, contents=contents, config=config)
+    text = (resp.text or "").strip()
+    if not text:
+        raise RuntimeError("empty response")
+    sources = []
+    queries = []
+    try:
+        md = resp.candidates[0].grounding_metadata
+        if md and md.grounding_chunks:
+            for chunk in md.grounding_chunks[:6]:
+                uri = getattr(getattr(chunk, "web", None), "uri", None)
+                if uri:
+                    m = re.search(r"https?://(?:www\.)?([^/]+)", uri)
+                    if m:
+                        domain = m.group(1)
+                        if domain not in sources and "vertexaisearch" not in domain:
+                            sources.append(domain)
+        if md and md.web_search_queries:
+            queries = [q for q in list(md.web_search_queries)[:3] if q]
+    except Exception:
+        pass
+    if not sources and queries:
+        sources = [f'"{q}"' for q in queries]
+    return text, sources
+
+
+# Question keywords that MUST trigger a live Google search
+_SEARCH_TRIGGER = re.compile(
+    r"\b(DII|DII's|FIIs?|OCF|PAT|pledge[ds]?|shareholding|promoter|dilut\w*|"
+    r"buyback|results?|quarter\w*|Q[1-4]|news|earnings|profit|cash ?flow|"
+    r"debt|borrowings?|annual report|concalls?|mode a|institutional|"
+    r"worth entering|fundamentals?)\b",
+    re.I,
+)
+
+
+def ask_vikram(question, history):
+    """Send system prompt + session history + question to Gemini with Google
+    Search grounding. Falls back to no-tools if search fails on every model.
+
+    Returns (reply_text, sources, error_message) — error is None on success.
     """
-    global _working_model
+    global _working_model, _working_search
     err = _ensure_configured()
     if err:
-        return None, err
-    import google.generativeai as genai
+        return None, [], err
 
     system_prompt = (
         VIKRAM_SYSTEM_PROMPT
         .replace("{PORTFOLIO_CONTEXT}", build_portfolio_context())
         .replace("{ENGINE_SIGNALS}", build_engine_signals())
+        .replace("{FUNDAMENTAL_DATA}", build_fundamental_context(question))
+        .replace("{SIMULATION_LEDGER}", build_ledger_context())
+        .replace("{RISK_ARCHITECTURE}", build_risk_architecture_context())
     )
     contents = _sanitize_contents(history, question)
-    candidates = [_working_model] if _working_model else list(MODEL_CANDIDATES)
+    if _SEARCH_TRIGGER.search(question or ""):
+        contents[-1]["parts"][0]["text"] += (
+            "\n\n[NOTE: use your Google Search tool to ground the figures for this "
+            "question before answering — do not answer from memory.]"
+        )
+
+    attempts = []
+    if _working_model:
+        attempts.append((_working_model, _working_search))
+    for m in MODEL_CANDIDATES:
+        if not any(m == a[0] for a in attempts):
+            attempts.append((m, True))
+    # Last resort: any model without search
+    for m in MODEL_CANDIDATES:
+        attempts.append((m, False))
 
     last_err = None
-    for model_name in candidates:
+    search_was_requested = bool(_SEARCH_TRIGGER.search(question or ""))
+    for model_name, use_search in attempts:
         try:
-            model = genai.GenerativeModel(model_name=model_name, system_instruction=system_prompt)
-            resp = model.generate_content(contents, request_options={"timeout": 90})
-            text = (resp.text or "").strip()
-            if not text:
-                last_err = RuntimeError("empty response")
-                continue
+            text, sources = _generate(model_name, system_prompt, contents, use_search)
             _working_model = model_name
-            return text, None
+            _working_search = use_search
+            if search_was_requested and not sources and not use_search:
+                text = "(live search unavailable this query — answering from your data only)\n\n" + text
+            return text, sources, None
         except Exception as e:
             last_err = e
             continue
-    return None, f"Gemini error: {last_err}"
+    return None, [], f"Gemini error: {last_err}"
 
 
 # ---------------------------------------------------------------------------
@@ -392,12 +949,15 @@ PANEL_HIDDEN_STYLE = {"transform": "translateX(100%)", "transition": "transform 
 PANEL_SHOWN_STYLE = {"transform": "translateX(0)", "transition": "transform 0.3s ease"}
 
 _USER_BUBBLE = "self-end max-w-[85%] bg-primary/15 border border-primary/30 text-on-surface rounded-xl rounded-br-sm px-3 py-2 text-sm font-body-md whitespace-pre-wrap"
-_VIKRAM_BUBBLE = "self-start max-w-[95%] bg-white/5 border border-outline-variant/60 text-on-surface rounded-xl rounded-bl-sm px-3 py-2 text-sm font-body-md whitespace-pre-wrap leading-relaxed"
+_VIKRAM_BUBBLE = "self-start max-w-[95%] bg-white/5 border border-outline-variant/60 text-on-surface rounded-xl rounded-bl-sm px-4 py-3 text-sm font-body-md leading-relaxed"
 
 WELCOME_TEXT = (
-    "I'm Vikram — your portfolio-aware analyst. I can see your active positions and "
-    "today's engine signals. Ask me about a stock from the scanners, your positions, "
-    "or which mode (institutional / small-cap momentum) applies to a name."
+    "I'm Vikram — your institutional risk desk with live internet access. I see "
+    "your active positions, today's engine signals, and your full closed-trade "
+    "history. For any stock you name, I pull live fundamentals (market-cap class, "
+    "pledge trend, OCF/PAT, operating leverage, conviction score, veto status) "
+    "from screener.in and Google-search the rest. Ask me to audit your closed "
+    "trades, find alpha leaks, or run the full framework on a signal."
 )
 
 
@@ -408,11 +968,51 @@ def render_chat(history):
         text = (m.get("text") or "").strip()
         if not text:
             continue
-        cls = _USER_BUBBLE if role == "user" else _VIKRAM_BUBBLE
-        bubbles.append(html.Div(text, className=cls))
+        if role == "user":
+            bubbles.append(html.Div(text, className=_USER_BUBBLE))
+        else:
+            bubbles.append(html.Div(
+                dcc.Markdown(text, link_target="_blank", className="vikram-markdown"),
+                className=_VIKRAM_BUBBLE,
+            ))
+            sources = m.get("sources") or []
+            if sources:
+                bubbles.append(html.Div(
+                    ["🌐 live web sources: "] + [", ".join(sources)],
+                    className="self-start max-w-[95%] text-[10px] font-data-mono text-outline -mt-2 mb-3 px-3",
+                ))
     if not bubbles:
-        bubbles.append(html.Div(WELCOME_TEXT, className=_VIKRAM_BUBBLE))
+        bubbles.append(html.Div(WELCOME_TEXT, className=_USER_BUBBLE.replace("bg-primary/15 border border-primary/30", "bg-white/5 border border-outline-variant/60 rounded-bl-sm rounded-br-xl")))
     return bubbles
+
+
+def _loader_bubble():
+    """Animated 'Vikram is thinking' bubble shown while the query resolves."""
+    return html.Div(
+        className="self-start max-w-[95%] bg-white/5 border border-outline-variant/60 rounded-xl rounded-bl-sm px-3 py-2",
+        children=[
+            html.Div(
+                className="flex items-center gap-2",
+                children=[
+                    html.Span("Vikram is thinking", className="text-sm text-on-surface-variant font-body-md"),
+                    html.Span(
+                        className="vikram-dots",
+                        children=[html.Span(), html.Span(), html.Span()],
+                    ),
+                ],
+            ),
+            html.Div(
+                className="vikram-status",
+                children=[
+                    html.Div("Scanning your portfolio context..."),
+                    html.Div("Pulling live screener.in fundamentals..."),
+                    html.Div("Searching the wires..."),
+                    html.Div("Auditing the trade ledgers..."),
+                ],
+            ),
+            html.Div(className="vikram-loader-bar"),
+        ],
+    )
 
 
 @dash.callback(
@@ -428,25 +1028,53 @@ def vikram_panel_visibility(trigger_clicks, close_clicks):
 
 
 @dash.callback(
-    Output("vikram-chat", "children"),
-    Output("vikram-history", "data"),
     Output("vikram-input", "value"),
+    Output("vikram-chat", "children"),
+    Output("vikram-pending", "data"),
     Input("vikram-send", "n_clicks"),
     Input("vikram-input", "n_submit"),
     State("vikram-input", "value"),
     State("vikram-history", "data"),
     prevent_initial_call=True,
 )
-def send_message(n_clicks, n_submit, question, history):
+def ack_message(n_clicks, n_submit, question, history):
+    """Instant ack: clear the input, show the user bubble + animated loader.
+
+    The slow Gemini work happens in resolve_message, triggered by the
+    pending-question store. This returns in milliseconds so the UI feels
+    immediate.
+    """
     question = (question or "").strip()
     if not question:
         return no_update, no_update, no_update
     history = history or []
-    reply, err = ask_vikram(question, history)
+    chat = render_chat(history)
+    chat.append(html.Div(question, className=_USER_BUBBLE))
+    chat.append(_loader_bubble())
+    pending = {"q": question, "n": time.time()}
+    return "", chat, pending
+
+
+@dash.callback(
+    Output("vikram-chat", "children"),
+    Output("vikram-history", "data"),
+    Input("vikram-pending", "data"),
+    State("vikram-history", "data"),
+    prevent_initial_call=True,
+)
+def resolve_message(pending, history):
+    """Slow half: run the Gemini query (screener fetch + Google Search) and
+    replace the loader with Vikram's answer."""
+    if not pending or not pending.get("q"):
+        return no_update, no_update
+    question = pending["q"]
+    history = history or []
+    reply, sources, err = ask_vikram(question, history)
     if err:
         reply = f"⚠️ {err}"
+        sources = []
     new_history = (history + [
         {"role": "user", "text": question},
-        {"role": "model", "text": reply},
+        {"role": "model", "text": reply, "sources": sources},
     ])[-MAX_HISTORY:]
-    return render_chat(new_history), new_history, ""
+    return render_chat(new_history), new_history

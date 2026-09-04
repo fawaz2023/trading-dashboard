@@ -15,6 +15,8 @@ data/combined_2years.csv
 
 venv/
 *.log
+.env
+data/fundamental_cache.json
 flexgate_test_output.log
 backups/
 scratch/
