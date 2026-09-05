@@ -1,8 +1,8 @@
 import os
 import sys
 import io
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+# if sys.stdout.encoding != 'utf-8':
+#     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 import glob
 import pandas as pd
@@ -572,12 +572,12 @@ if "DATE" not in df_all.columns:
     raise ValueError("DATE column missing in df_all before progressive averages")
 
 df_all["DATE"] = pd.to_datetime(df_all["DATE"], errors="coerce")
-symbols = df_all["SYMBOL"].dropna().unique().tolist()
+grouped_symbols = df_all.groupby("SYMBOL")
 results = []
 processed = 0
 
-for symbol in symbols:
-    df_stock = df_all[df_all["SYMBOL"] == symbol].sort_values("DATE")
+for symbol, df_stock in grouped_symbols:
+    df_stock = df_stock.sort_values("DATE")
     if df_stock.empty:
         continue
 
@@ -639,7 +639,7 @@ for symbol in symbols:
 
     processed += 1
     if processed % 500 == 0:
-        print(f"Processed {processed}/{len(symbols)} stocks...")
+        print(f"Processed {processed}/{len(grouped_symbols)} stocks...")
 
 df_final = pd.DataFrame(results)
 

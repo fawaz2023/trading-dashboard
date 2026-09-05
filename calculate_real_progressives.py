@@ -184,12 +184,12 @@ if "SERIES" in df_all.columns:
 # ========== CALCULATE PROGRESSIVE AVERAGES ==========
 print("Calculating progressive averages (based on TRADING DAYS)...")
 
-symbols = df_all["SYMBOL"].unique()
+grouped_symbols = df_all.groupby("SYMBOL")
 results = []
 processed = 0
 
-for symbol in symbols:
-    df_stock = df_all[df_all["SYMBOL"] == symbol].sort_values("DATE")
+for symbol, df_stock in grouped_symbols:
+    df_stock = df_stock.sort_values("DATE")
     
     # Get latest day data
     latest = df_stock[df_stock["DATE"] == latest_date]
@@ -225,7 +225,7 @@ for symbol in symbols:
     
     processed += 1
     if processed % 500 == 0:
-        print(f"  Processed {processed}/{len(symbols)} stocks...")
+        print(f"  Processed {processed}/{len(grouped_symbols)} stocks...")
 
 df_final = pd.DataFrame(results)
 

@@ -800,9 +800,10 @@ _client = None
 _working_model = None
 _working_search = None
 
-# gemini-2.5-flash and 2.5-flash-lite are retired (404) for current API keys;
-# updated to use gemini-3.5-flash-lite as recommended by the API error message.
-MODEL_CANDIDATES = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
+# Verified live 2026-09-04: gemini-3.5-flash + gemini-flash-latest work;
+# 3.5-flash-lite intermittently 503s (high demand, kept as last fallback);
+# gemini-2.5-flash / 2.5-flash-lite are 404-retired for this key.
+MODEL_CANDIDATES = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.5-flash-lite"]
 
 
 def _ensure_configured():
