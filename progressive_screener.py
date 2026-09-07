@@ -1,6 +1,8 @@
 import pandas as pd
+import logging
 from config import Config
 
+logger = logging.getLogger("progressive_screener")
 class ProgressiveSpiker:
     def __init__(self, df):
         self.df = df

@@ -41,12 +41,11 @@ def load_t2t_map():
 
 
 def load_latest_signals():
-    """Read active_signals_ranked.csv and keep ONLY the latest date's signals.
+    """Read survivors_archive.csv and keep ONLY the latest date's signals.
 
-    The CSV pools the last 30 days of signals (calculate_active_signals.py);
-    without this filter the dashboard dumps the whole history as 'today'.
+    This ensures 12-condition signal parity with the Streamlit dashboard.
     """
-    path = os.path.join("data", "active_signals_ranked.csv")
+    path = os.path.join("data", "survivors_archive.csv")
     if not os.path.exists(path):
         return pd.DataFrame(), None
     try:

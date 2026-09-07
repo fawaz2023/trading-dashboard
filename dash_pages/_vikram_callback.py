@@ -10,6 +10,7 @@ signals, plus Vikram's dual-mode institutional/small-cap mental model.
 import os
 import re
 import time
+import json
 
 import dash
 from dash import Input, Output, State, html, dcc, no_update
@@ -287,7 +288,12 @@ Then (and only then) a SHORT prose analysis (see PROSE RULES below).
 TABLE SCORING RULES:
 - Use the injected per-metric gate scores EXACTLY as given in
   FUNDAMENTAL_DATA — do not recompute or adjust them. Use N/A / ⏳ when a
-  score was not injected. Never invent values.
+  score was not injected and is genuinely missing. Never invent values.
+- For metrics listed in the 'not_applicable_metrics' array in
+  FUNDAMENTAL_DATA, output '— / N/A (Class S)' or '— / N/A (Class L)'
+  in the table cells instead of N/A / ⏳ (these are intentionally skipped).
+  For FINANCIAL SECTOR stocks, FCF Quality is '— / N/A (financial sector —
+  OCF is loan-book driven)' — never a 0/10, never a veto.
 - Signal column emoji rules (applied to the injected scores):
   - 🔥🔥 = exceptional (≥ 9/10)
   - 🔥 = good (7–8.9 / 10)
@@ -314,9 +320,12 @@ WHEN TO SHOW THE TABLE:
   towers"), or FUNDAMENTAL_DATA has no entry for it: populate the table from
   your Google Search results where possible, and use ⏳ for anything you
   could not verify. Never guess.
-- If fundamentals are unavailable or all fields are N/A: show the table
-  headers with ⏳ in all cells and note: "Fundamental data unavailable —
-  table cannot be scored. Run a manual screener.in check."
+- If fundamentals are unavailable or all fields are N/A: FIRST use your
+  Google Search tool to find the fundamentals (market cap, promoter/pledge,
+  OCF/PAT, interest coverage, RoCE) and populate the table from search
+  results with 🔍 markers on searched values. Only if search also fails,
+  show ⏳ cells and note: "Fundamental data unavailable — run a manual
+  screener.in check." Never show an all-⏳ table without having searched.
 - Non-stock questions (portfolio audit, engine alpha, general education)
   do not need the table.
 
@@ -485,14 +494,22 @@ _SYMBOL_STOPWORDS = {
 
 @lru_cache(maxsize=1)
 def _known_symbols():
-    """Symbols from portfolio + engine watchlists (cached per process)."""
+    """Symbols from portfolio + engine watchlists + signal history + ranked
+    pool (cached per process). Includes historically-fired scanner names so
+    bare lowercase queries ("katipatang") resolve without a search call."""
     syms = set()
-    for path in [ACTIVE_WATCHLIST] + [p for _, p in ENGINE_FILES]:
+    paths = [ACTIVE_WATCHLIST] + [p for _, p in ENGINE_FILES]
+    paths += [
+        os.path.join("data", "signal_history.csv"),
+        os.path.join("data", "active_signals_ranked.csv"),
+        os.path.join("data", "survivors_archive.csv"),
+    ]
+    for path in paths:
         try:
             df = pd.read_csv(path)
-            col = "SYMBOL" if "SYMBOL" in df.columns else ("symbol" if "symbol" in df.columns else None)
+            col = "SYMBOL" if "SYMBOL" in df.columns else ("Symbol" if "Symbol" in df.columns else ("symbol" if "symbol" in df.columns else None))
             if col:
-                syms.update(str(s).strip().upper() for s in df[col].dropna())
+                syms.update(str(s).strip().upper() for s in df[col].dropna() if len(str(s).strip()) >= 3)
         except Exception:
             continue
     return syms
@@ -501,10 +518,22 @@ def _known_symbols():
 def extract_query_symbols(question):
     """Uppercase tokens that look like stock symbols; known ones first.
 
-    Falls back to screener.in's company-search API when no token looks like a
-    symbol but the question contains lowercase words (e.g. "indus towers").
+    Also matches known symbols typed in any case (e.g. "sjlogistic",
+    "SJLogistic") and falls back to screener.in's company-search API for
+    name-like queries with one or more lowercase words ("indus towers",
+    "sj logistics").
     """
-    tokens = re.findall(r"\b[A-Z][A-Z0-9&-]{2,19}\b", question or "")
+    known = _known_symbols()
+    q = question or ""
+    q_upper = q.upper()
+
+    # 1) Whole-query match against known symbols (any casing) — catches
+    #    "sjlogistic", "SJLOGISTIC fired...", "SJLogistic?" etc.
+    for sym in known:
+        if re.search(rf"\b{re.escape(sym)}\b", q_upper):
+            return [sym]
+
+    tokens = re.findall(r"\b[A-Z][A-Z0-9&-]{2,19}\b", q)
     seen = set()
     candidates = []
     for t in tokens:
@@ -513,34 +542,69 @@ def extract_query_symbols(question):
             continue
         seen.add(t)
         candidates.append(t)
-    known = _known_symbols()
     ordered = [c for c in candidates if c in known] + [c for c in candidates if c not in known]
     if ordered:
         return ordered[:_MAX_SCREENER_LOOKUPS]
 
-    # No symbol-like token: try company-name search (>= 2 consecutive words)
+    # 2) No symbol-like token: try company-name search. Requires >= 2
+    #    distinctive words (or a long single word) so generic questions
+    #    ("how is my portfolio") never trigger a fetch.
     _NAME_STOP = {"what", "about", "tell", "should", "would", "could", "think",
                   "view", "analysis", "analyze", "analyse", "framework", "stock",
                   "company", "share", "this", "that", "have", "does", "your",
                   "full", "apply", "fired", "screener", "condition", "worth",
-                  "entering", "enter", "check", "look", "looks", "like"}
-    words = [w for w in re.findall(r"[A-Za-z][a-z]{2,}", question or "") if w not in _NAME_STOP]
-    if len(words) >= 2:
-        try:
-            import requests as _rq
-            r = _rq.get(
-                "https://www.screener.in/api/company/search/",
-                params={"q": " ".join(words[:3])},
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-                timeout=5,
-            )
-            if r.status_code == 200:
-                for hit in r.json()[:1]:
+                  "entering", "enter", "check", "look", "looks", "like", "the",
+                  "and", "for", "you", "today", "best", "good", "bad", "buy",
+                  "sell", "give", "take", "need", "know", "when", "why", "how",
+                  "my", "portfolio", "positions", "trades", "audit", "alpha",
+                  "leaking", "engines", "mode", "fundamentals", "indian"}
+    words = [w for w in re.findall(r"[A-Za-z][A-Za-z&-]{2,}", q) if w.lower() not in _NAME_STOP]
+    # Guard: a single short-ish word is too ambiguous to auto-fetch
+    if len(words) >= 2 or (len(words) == 1 and len(words[0]) >= 7):
+        # Variants: original query spacing (preserves "S J Logistics"),
+        # reconstructed distinctive words, and their uppercase forms.
+        variants = [q[:60].strip(), " ".join(words[:3])]
+        for v in list(variants):
+            variants.append(v.upper())
+        seen_v = set()
+        uniq = [v for v in variants if v and not (v in seen_v or seen_v.add(v))]
+        for variant in uniq:
+            try:
+                import requests as _rq
+                r = _rq.get(
+                    "https://www.screener.in/api/company/search/",
+                    params={"q": variant},
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+                    timeout=10,
+                )
+                if r.status_code != 200:
+                    continue
+                for hit in r.json()[:2]:
                     m = re.search(r"/company/([A-Z0-9&-]+)/", hit.get("url", ""))
-                    if m:
-                        return [m.group(1)]
-        except Exception:
-            pass
+                    name = hit.get("name", "")
+                    if not m or m.group(1) in _SYMBOL_STOPWORDS:
+                        continue
+                    sym = m.group(1)
+                    # Relevance guard: the hit must share a distinctive
+                    # sub-token with the query — prevents "Sj logistics"
+                    # resolving to AEGISLOG via screener's fuzzy index.
+                    q_norm = re.sub(r"[^A-Z0-9]", "", q.upper())
+                    s_norm = re.sub(r"[^A-Z0-9]", "", sym.upper())
+                    # Company name with legal suffixes stripped — lets
+                    # "kati patang lifestyle" match "Kati patang Lifestyle
+                    # Ltd" (name longer than query must still match).
+                    n_norm = re.sub(r"[^A-Z0-9]", "", name.upper())
+                    n_norm = re.sub(r"(LTD|LIMITED|INDIA|PLC|PVT)\d*$", "", n_norm)
+                    n_core = re.sub(r"(LTD|LIMITED|INDIA|PLC|PVT)", "", n_norm)
+                    if q_norm and (
+                        s_norm in q_norm
+                        or q_norm in s_norm
+                        or (n_norm and n_norm in q_norm)
+                        or (n_core and n_core in q_norm)
+                    ):
+                        return [sym]
+            except Exception:
+                pass
     return []
 
 
@@ -643,18 +707,73 @@ def build_fundamental_context(question):
             d, res = {}, {"stock_class": "U", "veto": False, "score": None,
                           "rating": "FUNDAMENTALS_UNAVAILABLE", "display_badge": "❓ unavailable",
                           "veto_reasons": [], "boosters": [], "drags": []}
+        # Numeric screener codes (e.g. 531126 for BSE-only listings): resolve
+        # back to the engine's alphabetical symbol so the context, technical
+        # trigger, and cache all use ONE identity.
+        display_sym = sym
+        if sym.isdigit() and not d.get("error"):
+            target_name = re.sub(r"[^A-Z0-9]", "", str(d.get("name", "")).upper())
+            target_name = re.sub(r"(LTD|LIMITED|INDIA|PLC|PVT)$", "", target_name)
+            if target_name:
+                try:
+                    for cand in _known_symbols():
+                        cache_name = None
+                        try:
+                            cache_path = os.path.join("data", "fundamental_cache.json")
+                            if os.path.exists(cache_path):
+                                with open(cache_path, "r", encoding="utf-8") as fh:
+                                    cache = json.load(fh)
+                                entry = cache.get(cand)
+                                cache_name = (entry or {}).get("data", {}).get("name", "")
+                        except Exception:
+                            cache_name = None
+                        if not cache_name:
+                            continue
+                        cand_name = re.sub(r"(LTD|LIMITED|INDIA|PLC|PVT)$", "", re.sub(r"[^A-Z0-9]", "", str(cache_name).upper()))
+                        if cand_name and cand_name == target_name:
+                            display_sym = cand
+                            try:
+                                cache_path = os.path.join("data", "fundamental_cache.json")
+                                cache = {}
+                                if os.path.exists(cache_path):
+                                    with open(cache_path, "r", encoding="utf-8") as fh:
+                                        cache = json.load(fh)
+                                entry = cache.get(sym)
+                                if entry and cand not in cache:
+                                    cache[cand] = entry
+                                    with open(cache_path, "w", encoding="utf-8") as fh:
+                                        json.dump(cache, fh, indent=1)
+                            except Exception:
+                                pass
+                            break
+                except Exception:
+                    pass
         if d.get("error"):
-            lines.append(f"- {sym}: FUNDAMENTALS FETCH FAILED — {d['error']}. Do NOT guess these numbers; say they need manual verification.")
+            lines.append(
+                f"- {display_sym}: LIVE FUNDAMENTAL FETCH INCOMPLETE ({d['error']}). "
+                f"You MUST now use your Google Search tool to find this company's key fundamentals "
+                f"(market cap, promoter/pledge, OCF vs PAT, interest coverage trend, RoCE) and "
+                f"populate the scorecard from search results, marking each searched value with 🔍. "
+                f"Only use ⏳ for metrics you cannot verify from search either. Do NOT guess."
+            )
             continue
         if res.get("veto"):
-            lines.append(f"⚠️ AUTOMATED VETO ACTIVE FOR {sym}: {'; '.join(res['veto_reasons'])}. Do not give a buy view.")
-        parts = [f"- {sym} ({d.get('name', sym)}) [CLASS {res['stock_class']}"]
+            lines.append(f"⚠️ AUTOMATED VETO ACTIVE FOR {display_sym}: {'; '.join(res['veto_reasons'])}. Do not give a buy view.")
+        parts = [f"- {display_sym} ({d.get('name', sym)}) [CLASS {res['stock_class']}"]
         if d.get("market_cap_cr") is not None:
             parts.append(f"mcap ₹{d['market_cap_cr']:,.0f} Cr")
         if d.get("free_float_cr") is not None:
             parts.append(f"free float ≈ ₹{d['free_float_cr']:,.0f} Cr (derived, excl. pledge)")
         if d.get("price") is not None:
             parts.append(f"price ₹{d['price']:,.0f}")
+        if d.get("sector_type") == "financial":
+            parts.append("FINANCIAL SECTOR (bank/NBFC/broker — OCF is structurally negative while the loan book grows; do NOT treat negative OCF/PAT as a fraud signal or apply the FCF veto)")
+        if d.get("data_stale"):
+            parts.append("DATA IS STALE (live fetch failed; serving cached values from an earlier fetch — mention this in your answer)")
+        if d.get("op_lev_data_note"):
+            parts.append(f"op-lev: {d['op_lev_data_note']} (limited history approximation)")
+        if d.get("interest_coverage_data_note"):
+            parts.append(f"interest coverage: {d['interest_coverage_data_note']} (limited history approximation)")
         parts.append("]")
         lines.append(", ".join(parts))
         detail = []
@@ -676,8 +795,10 @@ def build_fundamental_context(question):
         if "pledge_trend" in d:
             note = d.get("pledge_note", "")
             detail.append(f"Pledge trend (4Q): {d['pledge_trend']} — direction {d.get('pledge_direction', '?')}{f' ({note})' if note else ''}")
-        if "fcf_pat_ratio" in d:
+        if "fcf_pat_ratio" in d and d.get("sector_type") != "financial":
             detail.append(f"OCF/PAT 3yr cumulative: {d['fcf_pat_ratio']}x (OCF 3yr {d.get('ocf_3yr_cr')} ₹Cr vs PAT 3yr {d.get('pat_3yr_cr')} ₹Cr)")
+        elif d.get("sector_type") == "financial" and "fcf_pat_ratio" in d:
+            detail.append(f"OCF/PAT (FINANCIAL SECTOR — informational only, loan-book driven, do not score/veto): {d['fcf_pat_ratio']}x (OCF 3yr {d.get('ocf_3yr_cr')} ₹Cr vs PAT 3yr {d.get('pat_3yr_cr')} ₹Cr)")
         if "revenue_4q_growth" in d:
             detail.append(f"Revenue growth (4Q YoY): {_pct(d['revenue_4q_growth'] * 100, 1)}")
         if "ebit_4q_growth" in d:
@@ -693,6 +814,13 @@ def build_fundamental_context(question):
         if detail:
             lines.append("    " + "; ".join(detail))
         verdict = [f"CONVICTION: {res.get('display_badge', 'n/a')} (rating {res.get('rating')}, score {res.get('score')})"]
+        na = res.get("not_applicable_metrics") or []
+        if na:
+            verdict.append(
+                "NOT APPLICABLE metrics (intentionally skipped for this stock — render these "
+                "rows as '— / N/A (not applicable)' in the table, NOT as missing data ⏳): "
+                + ", ".join(sorted(set(na)))
+            )
         if res.get("boosters"):
             verdict.append("boosters: " + "; ".join(res["boosters"]))
         if res.get("drags"):

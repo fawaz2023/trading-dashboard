@@ -175,11 +175,17 @@ df_all["DELIV_PER"] = pd.to_numeric(df_all["DELIV_PER"], errors='coerce').fillna
 
 # Calculate metrics
 df_all["DELIVERY_TURNOVER"] = df_all["DELIV_QTY"] * df_all["CLOSE"]
-df_all["ATW"] = df_all["TOTTRDVAL"] / 1000
+if "NO_OF_TRADES" in df_all.columns:
+    df_all["ATW"] = (df_all["TOTTRDVAL"] / df_all["NO_OF_TRADES"].replace(0, pd.NA)).fillna(0)
+else:
+    df_all["ATW"] = 0
 
-# Filter equity only
+# Filter equity only: keep NSE EQ series + all BSE rows (BSE has no SERIES column)
 if "SERIES" in df_all.columns:
-    df_all = df_all[df_all["SERIES"] == "EQ"].copy()
+    df_all = df_all[
+        ((df_all["SERIES"] == "EQ") & (df_all["EXCHANGE"] == "NSE")) |
+        (df_all["EXCHANGE"] == "BSE")
+    ].copy()
 
 # ========== CALCULATE PROGRESSIVE AVERAGES ==========
 print("Calculating progressive averages (based on TRADING DAYS)...")

@@ -1,8 +1,8 @@
 import os
 import sys
 import io
-# if sys.stdout.encoding != 'utf-8':
-#     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 import glob
 import pandas as pd
@@ -14,6 +14,27 @@ from bse_downloader_working import BSEDownloaderWorking, normalize_bse_delivery,
 from config import Config
 
 pd.options.mode.chained_assignment = None
+
+import logging
+from logging.handlers import RotatingFileHandler
+
+os.makedirs("logs", exist_ok=True)
+logger = logging.getLogger("auto_update")
+logger.setLevel(logging.INFO)
+handler = RotatingFileHandler("logs/auto_update.log", maxBytes=5*1024*1024, backupCount=3)
+handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(handler)
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    sys.exit(1)
+
+sys.excepthook = handle_exception
+
+logger.info("Starting SMART AUTO-UPDATE...")
 
 print("=" * 70)
 print("SMART AUTO-UPDATE - NSE + BSE with Real Progressives (v4 ENHANCED)")
@@ -424,8 +445,6 @@ bse_merged_count = len(df_bse[df_bse["DELIV_PER"] > 0])
 print(f"✅ BSE stocks with delivery data merged: {bse_merged_count}/{len(df_bse)}")
 
 
-import os
-import pandas as pd
 from datetime import datetime
 
 def log_bse_delivery_stats(df_bse, run_date=None):
@@ -520,7 +539,7 @@ if "SYMBOL" in df_all.columns:
     before = len(df_all)
     df_all = df_all[
         ~df_all["SYMBOL"].str.contains(
-            "ETF|LIQID|LIQUID|FUND|INDEX|NIFTY|SENSEX|GLOBE|BEES|HDFCPVTBAN|HDFCPSU|BANKPSU|MOMENTUM|LOWVOL|ESILVER|BBNPP|PSUBANK|GOLD|SILVER|EQUAL|NIFBAN|NIF100",
+            "ETF|LIQID|LIQUID|FUND|INDEX|NIFTY|SENSEX|GLOBE|BEES|HDFCPVTBAN|HDFCPSU|BANKPSU|MOMENTUM|LOWVOL|ESILVER|BBNPP|PSUBANK|GOLD|SILVER|EQUAL|NIFBAN|NIF100|GROWW",
             case=False,
             na=False
         )
@@ -581,9 +600,13 @@ for symbol, df_stock in grouped_symbols:
     if df_stock.empty:
         continue
 
-    latest = df_stock.iloc[-1]
-    latest_dt = latest["DATE"]
-    hist = df_stock[df_stock["DATE"] < latest_dt].sort_values("DATE", ascending=False)
+    # GUARD: only include symbols that traded on the latest market date
+    latest_rows = df_stock[df_stock["DATE"] == latest_date]
+    if latest_rows.empty:
+        continue
+
+    latest = latest_rows.iloc[0]
+    hist = df_stock[df_stock["DATE"] < latest_date].sort_values("DATE", ascending=False)
 
     df_1w = hist.head(5)
     df_1m = hist.head(22)
@@ -611,7 +634,7 @@ for symbol, df_stock in grouped_symbols:
     atw_1m = df_1m["ATW"].mean() if len(df_1m) > 0 else latest_atw
 
     results.append({
-        "DATE": latest_dt,
+        "DATE": latest_date,
         "SYMBOL": symbol,
         "ISIN": latest.get("ISIN", None),
         "EXCHANGE": latest.get("EXCHANGE", "NSE"),
@@ -647,13 +670,24 @@ df_final = pd.DataFrame(results)
 # Step 11: Save outputs
 # -------------------------------
 os.makedirs(os.path.dirname(Config.COMBINED_FILE), exist_ok=True)
-
 dashboard_file = "data/combined_dashboard_live.csv"
-df_final.to_csv(dashboard_file, index=False)
-df_final.to_csv(Config.COMBINED_FILE, index=False)
 
+import time
 import shutil
-shutil.copy("data/combined_dashboard_live.csv", "data/dashboard_cloud.csv")
+
+for attempt in range(5):
+    try:
+        df_final.to_csv(dashboard_file, index=False)
+        df_final.to_csv(Config.COMBINED_FILE, index=False)
+        shutil.copy("data/combined_dashboard_live.csv", "data/dashboard_cloud.csv")
+        logger.info(f"Successfully wrote output files on attempt {attempt+1}")
+        break
+    except PermissionError as e:
+        logger.warning(f"PermissionError writing outputs (attempt {attempt+1}/5): {e}. Retrying in 2 seconds...")
+        time.sleep(2)
+else:
+    logger.error("Failed to write output files after 5 attempts due to PermissionError.")
+    sys.exit(1)
 
 print("\n" + "="*70)
 print("✅ SUCCESS!")
