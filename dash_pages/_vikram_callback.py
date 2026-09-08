@@ -1158,7 +1158,7 @@ def vikram_panel_visibility(trigger_clicks, close_clicks):
 
 @dash.callback(
     Output("vikram-input", "value"),
-    Output("vikram-chat", "children"),
+    Output("vikram-chat", "children", allow_duplicate=True),
     Output("vikram-pending", "data"),
     Input("vikram-send", "n_clicks"),
     Input("vikram-input", "n_submit"),
@@ -1185,7 +1185,7 @@ def ack_message(n_clicks, n_submit, question, history):
 
 
 @dash.callback(
-    Output("vikram-chat", "children"),
+    Output("vikram-chat", "children", allow_duplicate=True),
     Output("vikram-history", "data"),
     Input("vikram-pending", "data"),
     State("vikram-history", "data"),

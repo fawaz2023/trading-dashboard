@@ -43,7 +43,7 @@ sidebar_header = html.Div(
 sidebar_footer = html.Div(
     className="flex flex-col gap-md mt-auto pt-lg border-t border-outline-variant",
     children=[
-        html.Button("Trade Now", className="w-full bg-primary text-on-primary font-headline-sm text-headline-sm rounded-lg py-sm min-h-[44px] hover:bg-primary-fixed transition-colors shadow-[0_0_15px_rgba(174,198,255,0.2)]"),
+        html.Button("Trade Now", id="trade-now-btn", className="w-full bg-primary text-on-primary font-headline-sm text-headline-sm rounded-lg py-sm min-h-[44px] hover:bg-primary-fixed transition-colors shadow-[0_0_15px_rgba(174,198,255,0.2)]"),
         html.A([html.Span("help_outline", className="material-symbols-outlined text-lg"), "Support"], href="#", className="flex items-center gap-md px-sm py-sm rounded-lg font-label-caps text-label-caps text-on-surface-variant hover:text-secondary hover:bg-white/5 transition-all duration-200 ease-in-out min-h-[44px]"),
         html.A([html.Span("logout", className="material-symbols-outlined text-lg"), "Logout"], href="#", className="flex items-center gap-md px-sm py-sm rounded-lg font-label-caps text-label-caps text-on-surface-variant hover:text-secondary hover:bg-white/5 transition-all duration-200 ease-in-out min-h-[44px]"),
     ]

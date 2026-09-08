@@ -27,6 +27,11 @@ def score_signals(signals):
 def calculate_atr_and_risk(df, equity=1000000, max_cap_pct=0.10, is_flexgate=False):
     """Fetch ATR14 from yfinance and calculate Risk parameters"""
     if df.empty:
+        df["ATR14"] = np.nan
+        df["STOP_LOSS"] = np.nan
+        df["TAKE_PROFIT"] = np.nan
+        df["CHANDELIER_EXIT"] = np.nan
+        df["REC_POS_SIZE_INR"] = np.nan
         return df
         
     df = df.copy()

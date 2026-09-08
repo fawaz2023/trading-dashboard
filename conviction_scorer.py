@@ -13,9 +13,9 @@ import math
 def classify(market_cap_cr):
     if market_cap_cr is None:
         return "U"
-    if market_cap_cr > 10000:
+    if market_cap_cr >= 10000.0:
         return "L"
-    if market_cap_cr >= 500:
+    if market_cap_cr >= 500.0:
         return "M"
     return "S"
 
@@ -86,10 +86,6 @@ def fundamental_strength(fund):
     full conviction score cannot apply. Averages the available /10 metrics
     (x10); vetoes drive it to 0.
     """
-    gate = _gate_scores(fund)
-    avail = [v for v in gate.values() if v is not None]
-    if len(avail) < 2:
-        return gate, None, "INSUFFICIENT_DATA"
     veto = False
     pledge = fund.get("pledge_trend") or [0.0]
     if fund.get("pledge_direction") == "rising" and (pledge[-1] or 0) >= 0.5:
@@ -98,7 +94,12 @@ def fundamental_strength(fund):
     if fund.get("sector_type") != "financial" and ratio is not None and not math.isclose(ratio, 0) and (ratio > 3.0 or ratio < 1 / 3.0):
         veto = True
     if veto:
-        return gate, 0, "VETO"
+        return {}, 0, "VETO"
+
+    gate = _gate_scores(fund)
+    avail = [v for v in gate.values() if v is not None]
+    if len(avail) < 2:
+        return gate, None, "INSUFFICIENT_DATA"
     score = round(sum(avail) / len(avail) * 10)
     if score >= 75:
         rating = "STRONG"
@@ -112,7 +113,15 @@ def fundamental_strength(fund):
 class ConvictionScorer:
     def score(self, fund):
         """fund: dict from FundamentalFetcher.fetch(). Returns scoring dict."""
-        if not fund or fund.get("error"):
+        if not fund or fund.get("error") or fund.get("confidence") in ["PARSED_LOW_CONFIDENCE"]:
+            err_msg = fund.get("error", "no data") if fund else "no data"
+            if err_msg == "NOT_FOUND":
+                badge = "❓ Fundamentals unavailable (NOT_FOUND)"
+            elif fund and fund.get("confidence") == "PARSED_LOW_CONFIDENCE":
+                badge = "❓ Fundamentals low confidence (Honest-Lag applied)"
+            else:
+                badge = f"❓ Fundamentals unavailable ({err_msg})"
+
             return {
                 "stock_class": "U",
                 "veto": False,
@@ -121,7 +130,7 @@ class ConvictionScorer:
                 "rating": "FUNDAMENTALS_UNAVAILABLE",
                 "boosters": [],
                 "drags": [],
-                "display_badge": f"❓ Fundamentals unavailable ({fund.get('error', 'no data') if fund else 'no data'})",
+                "display_badge": badge,
                 "not_applicable_metrics": [],
             }
 
@@ -175,6 +184,16 @@ class ConvictionScorer:
             base["not_applicable_metrics"] = base.get("not_applicable_metrics", []) + ["fcf_quality"]
         elif ratio is not None and not math.isclose(ratio, 0) and (ratio > 3.0 or ratio < 1 / 3.0):
             veto_reasons.append(f"FCF/PAT 3yr cumulative divergence {ratio:.2f}x (outside [0.33, 3.0])")
+            
+        if veto_reasons:
+            base["veto"] = True
+            base["veto_reasons"] = veto_reasons
+            base["score"] = 0
+            base["rating"] = "VETO"
+            base["boosters"] = boosters
+            base["drags"] = drags
+            base["display_badge"] = f"🚫 VETO: {veto_reasons[0]}"
+            return base
 
         # ---- pledge points ----
         if fund.get("pledge_direction") == "falling" and (pledge[-1] or 0) >= 1.0:
@@ -207,16 +226,6 @@ class ConvictionScorer:
             elif cov == "deteriorating":
                 score -= 15
                 drags.append("Interest coverage deteriorating (-15)")
-
-        if veto_reasons:
-            base["veto"] = True
-            base["veto_reasons"] = veto_reasons
-            base["score"] = 0
-            base["rating"] = "VETO"
-            base["boosters"] = boosters
-            base["drags"] = drags
-            base["display_badge"] = f"🚫 VETO: {veto_reasons[0]}"
-            return base
 
         score = max(0, min(100, score))
         if score >= 75:

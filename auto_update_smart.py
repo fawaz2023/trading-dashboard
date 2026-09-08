@@ -512,9 +512,9 @@ else:
 
 df_all.drop(columns=["EXCH_PRIORITY"], inplace=True, errors="ignore")
 
-# -------------------------------
+# ======================================================================
 # Step 9: Compute metrics + filter universe
-# -------------------------------
+# ======================================================================
 df_all = ensure_cols(df_all, {"CLOSE":0,"TOTTRDQTY":0,"TOTTRDVAL":0, "NO_OF_TRADES":0,"DELIV_QTY":0,"DELIV_PER":0})
 
 for c in ["CLOSE","TOTTRDQTY","TOTTRDVAL","DELIV_QTY","DELIV_PER"]:
@@ -524,30 +524,27 @@ for c in ["CLOSE","TOTTRDQTY","TOTTRDVAL","DELIV_QTY","DELIV_PER"]:
 df_all["DELIVERY_TURNOVER"] = df_all["DELIV_QTY"] * df_all["CLOSE"]
 df_all["ATW"] = (df_all["TOTTRDVAL"] / df_all["NO_OF_TRADES"].replace(0, pd.NA)).fillna(0)
 
-# Filter SERIES (keep NSE EQ & all BSE)
+# ===== UNIVERSE FILTERING (COMBINED MASK TO PREVENT MEMORY THRASHING) =====
+import time
+t0 = time.time()
+before = len(df_all)
+
+# Base mask starts as all True
+mask = pd.Series(True, index=df_all.index)
+
+# 1. Filter SERIES (keep NSE EQ & all BSE)
 if "SERIES" in df_all.columns:
-    before = len(df_all)
-    df_all = df_all[
-        ((df_all["EXCHANGE"]=="NSE") & (df_all["SERIES"]=="EQ")) |
-        (df_all["EXCHANGE"]=="BSE")
-    ].copy()
-    after = len(df_all)
-    print(f"\nFiltered by SERIES (NSE EQ + all BSE): {before} -> {after}")
+    mask &= ((df_all["EXCHANGE"]=="NSE") & (df_all["SERIES"]=="EQ")) | (df_all["EXCHANGE"]=="BSE")
 
-# Symbol-based exclusions
+# 2. Exclude generic ETFs/FUNDS/INDEX (optimized regex without case=False)
 if "SYMBOL" in df_all.columns:
-    before = len(df_all)
-    df_all = df_all[
-        ~df_all["SYMBOL"].str.contains(
-            "ETF|LIQID|LIQUID|FUND|INDEX|NIFTY|SENSEX|GLOBE|BEES|HDFCPVTBAN|HDFCPSU|BANKPSU|MOMENTUM|LOWVOL|ESILVER|BBNPP|PSUBANK|GOLD|SILVER|EQUAL|NIFBAN|NIF100|GROWW",
-            case=False,
-            na=False
-        )
-    ].copy()
-    after = len(df_all)
-    print(f"Excluded generic ETFs/FUNDS/INDEX: {before} -> {after}")
+    syms_upper = df_all["SYMBOL"].fillna("").str.upper()
+    mask &= ~syms_upper.str.contains(
+        "ETF|LIQID|LIQUID|FUND|INDEX|NIFTY|SENSEX|GLOBE|BEES|HDFCPVTBAN|HDFCPSU|BANKPSU|MOMENTUM|LOWVOL|ESILVER|BBNPP|PSUBANK|GOLD|SILVER|EQUAL|NIFBAN|NIF100|GROWW",
+        regex=True
+    )
 
-# Explicitly drop known bond / NCD type BSE instruments
+# 3. Explicitly drop known bad ISINs
 bad_isins = [
     "INE148I07PY7", "INE1O3X15025", "INE296G07200", "INE296G07226",
     "INE306N08342", "INE443L08172", "INE501X07554", "INE501X08081",
@@ -555,32 +552,26 @@ bad_isins = [
     "INE836K07312", "INE939X07093",
 ]
 if "ISIN" in df_all.columns:
-    before = len(df_all)
-    df_all = df_all[~df_all["ISIN"].isin(bad_isins)].copy()
-    after = len(df_all)
+    mask &= ~df_all["ISIN"].isin(bad_isins)
 
-# Exclude non-equity BSE instruments (bonds, T-bills, SGBs, G-secs)
+# 4. Exclude NON-EQUITY BSE INSTRUMENTS (BONDS, T-BILLS, SGBs, G-SECS)
 if "SYMBOL" in df_all.columns:
-    before = len(df_all)
-    bond_patterns = [
-        r'^GS\d',                           # Government Securities: GS15MAR34C
-        r'^\d{3,4}GS\d',                    # G-Secs: 723GS39P, 824GS2027
-        r'^\d{3,4}[A-Z]{2,4}\d{2,4}[A-Z]?$', # ALL bonds: 754SBI38, 781IHFCL28
-        r'^SGB',                            # Sovereign Gold Bonds
-        r'\d+TB$',                          # Treasury Bills
-        r'SDL',                             # State Development Loans
-        r'MHSDL',                           # Maharashtra SDL
-        r'^\d{2,}[A-Z]+\d{2,}[A-Z]*$',      # G-Secs, SDLs, T-Bills (e.g. 75GS2034, 182T101025)
-        r'^[A-Z]+\d{4,}[A-Z]*$',            # Corp bonds with full dates (e.g. ICLF160525)
-        r'ZC\d{2,}',                        # Zero coupon bonds (e.g. JFCZC28)
-        r'PP$',                             # Preference Shares
-        r'^CS\d',                           # Convertible Securities
-        r'^EELZ',                           # EELZ T2T exception
-    ]
-    pattern = '|'.join(bond_patterns)
-    df_all = df_all[~df_all["SYMBOL"].str.contains(pattern, regex=True, na=False, case=False)].copy()
-    after = len(df_all)
-    print(f"Excluded bonds, T-bills, SGBs, and G-Secs: {before} -> {after}")
+    bond_prefixes = ('GS', 'SGB', 'SDL', 'MHSDL', 'ZC', 'CS', 'EELZ')
+    bond_suffixes = ('TB', 'PP')
+    
+    mask_prefix = syms_upper.str.startswith(bond_prefixes)
+    mask_suffix = syms_upper.str.endswith(bond_suffixes)
+    # Numeric prefix check ONLY for BSE
+    mask_numeric_bse = (df_all["SYMBOL"].fillna("").str.match(r'^\d')) & (df_all["EXCHANGE"] == "BSE")
+    
+    mask &= ~(mask_prefix | mask_suffix | mask_numeric_bse)
+
+# Apply mask once, eliminating redundant deep copies
+df_all = df_all[mask].copy()
+
+after = len(df_all)
+t1 = time.time()
+print(f"Filtered universe in single pass: {before} -> {after} rows (took {t1-t0:.2f}s)")
 
 # -------------------------------
 # Step 10: Calculate progressive averages
@@ -590,23 +581,28 @@ print("\n📈 Calculating progressive averages...")
 if "DATE" not in df_all.columns:
     raise ValueError("DATE column missing in df_all before progressive averages")
 
-df_all["DATE"] = pd.to_datetime(df_all["DATE"], errors="coerce")
+# Verify DATE is already datetime (parsed at line 488) to avoid re-parsing 1.5M rows
+assert pd.api.types.is_datetime64_any_dtype(df_all["DATE"]), "DATE column must be datetime"
+
+# Pre-sort to eliminate 5,600+ inner sorts in the loop
+df_all = df_all.sort_values(["SYMBOL", "DATE"])
 grouped_symbols = df_all.groupby("SYMBOL")
 results = []
 processed = 0
 
 for symbol, df_stock in grouped_symbols:
-    df_stock = df_stock.sort_values("DATE")
     if df_stock.empty:
         continue
 
     # GUARD: only include symbols that traded on the latest market date
-    latest_rows = df_stock[df_stock["DATE"] == latest_date]
-    if latest_rows.empty:
+    # Since df_all is pre-sorted by DATE ascending, the latest row is the last one.
+    latest = df_stock.iloc[-1]
+    if latest["DATE"] != latest_date:
         continue
 
-    latest = latest_rows.iloc[0]
-    hist = df_stock[df_stock["DATE"] < latest_date].sort_values("DATE", ascending=False)
+    # Historical rows (excluding latest), reversed so newest is first
+    # Avoids expensive sort_values() call inside the loop
+    hist = df_stock.iloc[:-1][::-1]
 
     df_1w = hist.head(5)
     df_1m = hist.head(22)
