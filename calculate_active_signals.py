@@ -187,8 +187,10 @@ def process_flexgate_engine(df, current_date):
         model = joblib.load("shadow_box_model.pkl")
         features = ['SIS', 'Whale_Density', 'Implied_Trades']
         pred_mask = flexgate_pool[features].notna().all(axis=1)
-        flexgate_pool.loc[pred_mask, "AI_WIN_PROBABILITY"] = model.predict_proba(flexgate_pool.loc[pred_mask, features])[:, 1] * 100
-        flexgate_pool["AI_WIN_PROBABILITY"] = flexgate_pool["AI_WIN_PROBABILITY"].fillna(0)
+        
+        flexgate_pool["AI_WIN_PROBABILITY"] = 0.0
+        if pred_mask.sum() > 0:
+            flexgate_pool.loc[pred_mask, "AI_WIN_PROBABILITY"] = model.predict_proba(flexgate_pool.loc[pred_mask, features])[:, 1] * 100
         
         # We no longer block based on AI probability. We just use sanity mask.
         flexgate_final = flexgate_pool[sanity_mask].copy()
@@ -343,8 +345,10 @@ def run_scoring():
                 model = joblib.load("shadow_box_model.pkl")
                 features = ['SIS', 'Whale_Density', 'Implied_Trades']
                 pred_mask = p[features].notna().all(axis=1)
-                p.loc[pred_mask, "AI_WIN_PROBABILITY"] = model.predict_proba(p.loc[pred_mask, features])[:, 1] * 100
-                p["AI_WIN_PROBABILITY"] = p["AI_WIN_PROBABILITY"].fillna(0)
+                
+                p["AI_WIN_PROBABILITY"] = 0.0
+                if pred_mask.sum() > 0:
+                    p.loc[pred_mask, "AI_WIN_PROBABILITY"] = model.predict_proba(p.loc[pred_mask, features])[:, 1] * 100
             else:
                 p["AI_WIN_PROBABILITY"] = 0
                 
