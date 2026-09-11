@@ -20,6 +20,7 @@ import time
 
 import requests
 from bs4 import BeautifulSoup
+from rpt_fetcher import RPTFetcher
 
 CACHE_PATH = os.path.join("data", "fundamental_cache.json")
 CACHE_TTL_SECONDS = 24 * 3600
@@ -123,6 +124,11 @@ class FundamentalFetcher:
                 data["error"] = "incomplete data from screener.in (financial tables missing from page)"
             return data
         if "error" not in data:
+            revenue_cr = data.get("revenue_ttm_cr")
+            rpt_info = RPTFetcher().fetch_rpt_data(symbol, revenue_cr=revenue_cr)
+            data["rpt_status"] = rpt_info.get("status", "NOT_FOUND")
+            data["rpt_pct"] = rpt_info.get("rpt_pct")
+            data["rpt_amount_cr"] = rpt_info.get("rpt_amount_cr")
             self._save_cache(symbol, data)
         return data
 
@@ -365,6 +371,11 @@ class FundamentalFetcher:
         ebit = [_num(v) for v in row(["Operating Profit", "Financing Profit"])]
         interest = [_num(v) for v in row(["Interest"])]
         out["quarterly_quarters"] = len(sales)
+        
+        # Calculate TTM Revenue for RPT percentage calculations
+        if len(sales) >= 4:
+            out["revenue_ttm_cr"] = sum(x for x in sales[-4:] if x is not None)
+            
         # Operating leverage: full YoY when >= 8 quarters; last-4 vs oldest
         # quarter approximation for 5-7 (new IPOs); skip below 5.
         if len(sales) >= 5 and len(ebit) >= 5:

@@ -272,6 +272,7 @@ Format it EXACTLY like this (replace values with real data):
 | Parameter | Score | Signal |
 |-----------|-------|--------|
 | 🚀 Operating Leverage | 9 / 10 | 🔥 |
+| 🤝 RPT % of Revenue | 12% | ⚠️ |
 | 💰 FCF Quality (OCF/PAT) | 10 / 10 | 🔥🔥 |
 | 📉 Promoter Pledge Trend | 7 / 10 | 🟢 |
 | 🏦 Interest Coverage | 5 / 10 | 🟢 |
@@ -303,6 +304,8 @@ TABLE SCORING RULES:
   - ⏳ = data not available
 - Veto Status: if any AUTOMATED VETO is active, show:
   🚫 VETO ACTIVE — [reason]
+  If UNVERIFIED_VETO is active, show:
+  ⚠️ UNVERIFIED_VETO — [reason]
 - The Overall Conviction score and rating come directly from the injected
   CONVICTION SCORE, not from re-computing
 - Class S / M verdict line: **⚡ Overall Conviction: [score] / 100 — [rating]**
@@ -759,6 +762,8 @@ def build_fundamental_context(question):
             continue
         if res.get("veto"):
             lines.append(f"⚠️ AUTOMATED VETO ACTIVE FOR {display_sym}: {'; '.join(res['veto_reasons'])}. Do not give a buy view.")
+        elif res.get("unverified_veto"):
+            lines.append(f"⚠️ UNVERIFIED_VETO ACTIVE FOR {display_sym}: {'; '.join(res['veto_reasons'])}. Do not give a clean pass.")
         parts = [f"- {display_sym} ({d.get('name', sym)}) [CLASS {res['stock_class']}"]
         if d.get("market_cap_cr") is not None:
             parts.append(f"mcap ₹{d['market_cap_cr']:,.0f} Cr")
@@ -809,6 +814,13 @@ def build_fundamental_context(question):
             detail.append(f"Interest coverage: {d['interest_coverage_trend']} (recent avg {d.get('interest_coverage_recent', 'n/m')}x)")
         if "roice_pct" in d:
             detail.append(f"RoICE (3yr ΔEBIT/ΔCE): {_pct(d['roice_pct'], 1)}")
+        if "rpt_pct" in d or "rpt_status" in d:
+            rpt = d.get("rpt_pct")
+            st = d.get("rpt_status", "NOT_FOUND")
+            if rpt is not None:
+                detail.append(f"RPT % of Revenue: {_pct(rpt, 2)} (Status: {st})")
+            else:
+                detail.append(f"RPT % of Revenue: NOT_FOUND (Status: {st})")
         if "borrowings_cr" in d:
             detail.append(f"Borrowings: ₹{d['borrowings_cr']:,.0f} Cr")
         if detail:

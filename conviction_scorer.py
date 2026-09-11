@@ -2,28 +2,49 @@
 
 Pure scoring logic over the fundamentals dict from FundamentalFetcher.
 Stock classes by MARKET CAP:
-  S < ₹500 Cr · M ₹500–10,000 Cr · L > ₹10,000 Cr
+  S < ₹7,000 Cr · M ₹7,000–20,000 Cr · L ≥ ₹20,000 Cr
 
-Class M (the screener's primary target) gets the full 5-metric score.
-Class S gets pledge + FCF only. Class L gets no score — disclaimer only.
+Small/Mid-Cap 6-Metric Stack Rank & Weights:
+  - Operating Leverage: Score (31%)
+  - RPT % of Revenue: Veto (26%) [Caution >10%, Veto >20%]
+  - Promoter Pledge Trend: Veto (19%)
+  - Interest Coverage Trend: Score (15%)
+  - RoICE: Score (6%)
+  - FCF/PAT Divergence: Score + Veto (3%)
+
+Veto metrics NEVER renormalize out — missing data produces UNVERIFIED_VETO.
+Score metrics renormalize over resolved metrics only with a Data Completeness Indicator.
 """
 import math
+
+PROVISIONAL_RPT_CAUTION_PCT = 10.0
+PROVISIONAL_RPT_VETO_PCT = 20.0
+
+METRIC_WEIGHTS = {
+    "op_leverage": 0.31,
+    "rpt_pct": 0.26,
+    "pledge_trend": 0.19,
+    "interest_coverage": 0.15,
+    "roice": 0.06,
+    "fcf_quality": 0.03,
+}
 
 
 def classify(market_cap_cr):
     if market_cap_cr is None:
         return "U"
-    if market_cap_cr >= 10000.0:
+    if market_cap_cr >= 20000.0:
         return "L"
-    if market_cap_cr >= 500.0:
+    if market_cap_cr >= 7000.0:
         return "M"
     return "S"
 
 
 def _gate_scores(fund):
-    """Per-metric /10 fundamental-gate scores (the anchors used in the
-    mandatory summary table). Returns {metric: (score/10 or None)}."""
+    """Per-metric /10 fundamental-gate scores. Returns {metric: (score/10 or None)}."""
     gate = {}
+
+    # 1. Operating Leverage (31%)
     ol = fund.get("op_lev_ratio")
     if fund.get("op_lev_inflecting"):
         gate["op_leverage"] = 10 if ol and ol > 3 else 8
@@ -36,20 +57,19 @@ def _gate_scores(fund):
             gate["op_leverage"] = 5
         else:
             gate["op_leverage"] = 2
-    ratio = fund.get("fcf_pat_ratio")
-    if fund.get("sector_type") == "financial":
-        pass  # OCF structurally negative for lenders — metric not applicable
-    elif ratio is not None:
-        if ratio > 3.0 or ratio < 1 / 3.0:
-            gate["fcf_quality"] = 0
-        elif ratio > 0.95:
-            gate["fcf_quality"] = 10
-        elif ratio >= 0.80:
-            gate["fcf_quality"] = 8
-        elif ratio >= 0.50:
-            gate["fcf_quality"] = 5
+
+    # 2. RPT % of Revenue (26%)
+    rpt_pct = fund.get("rpt_pct")
+    rpt_status = fund.get("rpt_status")
+    if rpt_status == "OK" and rpt_pct is not None:
+        if rpt_pct > PROVISIONAL_RPT_VETO_PCT:
+            gate["rpt_pct"] = 0
+        elif rpt_pct > PROVISIONAL_RPT_CAUTION_PCT:
+            gate["rpt_pct"] = 5
         else:
-            gate["fcf_quality"] = 2
+            gate["rpt_pct"] = 10
+
+    # 3. Promoter Pledge Trend (19%)
     direction = fund.get("pledge_direction")
     pledge = fund.get("pledge_trend") or []
     if direction is not None:
@@ -61,9 +81,13 @@ def _gate_scores(fund):
             gate["pledge_trend"] = 7
         else:
             gate["pledge_trend"] = 3 if (pledge[-1] or 0) < 2 else 0
+
+    # 4. Interest Coverage Trend (15%)
     cov = fund.get("interest_coverage_trend")
     if cov is not None:
         gate["interest_coverage"] = {"improving": 10, "stable": 4, "deteriorating": 2}.get(cov, 4)
+
+    # 5. RoICE (6%)
     roice = fund.get("roice_pct")
     if roice is not None:
         if roice > 30:
@@ -76,38 +100,53 @@ def _gate_scores(fund):
             gate["roice"] = 3
         else:
             gate["roice"] = 0
+
+    # 6. FCF/PAT Divergence (3%)
+    ratio = fund.get("fcf_pat_ratio")
+    if fund.get("sector_type") == "financial":
+        pass  # Financials: OCF structurally negative
+    elif ratio is not None:
+        if ratio > 3.0 or ratio < 1 / 3.0:
+            gate["fcf_quality"] = 0
+        elif ratio > 0.95:
+            gate["fcf_quality"] = 10
+        elif ratio >= 0.80:
+            gate["fcf_quality"] = 8
+        elif ratio >= 0.50:
+            gate["fcf_quality"] = 5
+        else:
+            gate["fcf_quality"] = 2
+
     return gate
 
 
 def fundamental_strength(fund):
-    """Fundamentals-only 0-100 score from the five gate metrics.
+    """Fundamentals 0-100 score from available gate metrics."""
+    veto_reasons = []
 
-    Used for Class L (no accumulation conviction) and as a fallback when the
-    full conviction score cannot apply. Averages the available /10 metrics
-    (x10); vetoes drive it to 0.
-    """
-    veto = False
-    pledge = fund.get("pledge_trend") or [0.0]
-    if fund.get("pledge_direction") == "rising" and (pledge[-1] or 0) >= 0.5:
-        veto = True
+    # Check Veto metrics
+    pledge = fund.get("pledge_trend") or []
+    if fund.get("pledge_direction") == "rising" and (pledge[-1] if pledge else 0) >= 0.5:
+        veto_reasons.append("Promoter pledge rising QoQ")
+
     ratio = fund.get("fcf_pat_ratio")
     if fund.get("sector_type") != "financial" and ratio is not None and not math.isclose(ratio, 0) and (ratio > 3.0 or ratio < 1 / 3.0):
-        veto = True
-    if veto:
-        return {}, 0, "VETO"
+        veto_reasons.append(f"FCF/PAT 3yr cumulative divergence ({ratio:.2f}x)")
+
+    rpt_pct = fund.get("rpt_pct")
+    if fund.get("rpt_status") == "OK" and rpt_pct is not None and rpt_pct > PROVISIONAL_RPT_VETO_PCT:
+        veto_reasons.append(f"RPT % of Revenue exceeds veto threshold ({rpt_pct:.1f}% > {PROVISIONAL_RPT_VETO_PCT}%)")
+
+    if veto_reasons:
+        return {}, 0, "VETO", veto_reasons
 
     gate = _gate_scores(fund)
     avail = [v for v in gate.values() if v is not None]
     if len(avail) < 2:
-        return gate, None, "INSUFFICIENT_DATA"
+        return gate, None, "INSUFFICIENT_DATA", []
     score = round(sum(avail) / len(avail) * 10)
-    if score >= 75:
-        rating = "STRONG"
-    elif score >= 45:
-        rating = "MODERATE"
-    else:
-        rating = "WEAK"
-    return gate, score, rating
+    rating = "STRONG" if score >= 75 else ("MODERATE" if score >= 45 else "WEAK")
+    return gate, score, rating, []
 
 
 class ConvictionScorer:
@@ -115,131 +154,175 @@ class ConvictionScorer:
         """fund: dict from FundamentalFetcher.fetch(). Returns scoring dict."""
         if not fund or fund.get("error") or fund.get("confidence") in ["PARSED_LOW_CONFIDENCE"]:
             err_msg = fund.get("error", "no data") if fund else "no data"
-            if err_msg == "NOT_FOUND":
-                badge = "❓ Fundamentals unavailable (NOT_FOUND)"
-            elif fund and fund.get("confidence") == "PARSED_LOW_CONFIDENCE":
-                badge = "❓ Fundamentals low confidence (Honest-Lag applied)"
-            else:
-                badge = f"❓ Fundamentals unavailable ({err_msg})"
+            badge = f"❓ Fundamentals unavailable ({err_msg})"
 
             return {
                 "stock_class": "U",
                 "veto": False,
+                "unverified_veto": False,
                 "veto_reasons": [],
                 "score": None,
                 "rating": "FUNDAMENTALS_UNAVAILABLE",
                 "boosters": [],
                 "drags": [],
                 "display_badge": badge,
+                "data_completeness": {"resolved_count": 0, "total_count": 6, "label": "0/6 metrics resolved"},
                 "not_applicable_metrics": [],
             }
 
         mcap = fund.get("market_cap_cr")
         stock_class = classify(mcap)
+
         base = {
             "stock_class": stock_class,
             "market_cap_cr": mcap,
             "veto": False,
+            "unverified_veto": False,
             "veto_reasons": [],
             "score": None,
             "rating": None,
             "boosters": [],
             "drags": [],
             "display_badge": None,
+            "data_completeness": {"resolved_count": 0, "total_count": 6, "label": "0/6 metrics resolved"},
             "not_applicable_metrics": [],
         }
 
-        if stock_class == "S":
-            base["not_applicable_metrics"] = ["op_leverage", "interest_coverage", "roice"]
-        elif stock_class == "L":
-            base["not_applicable_metrics"] = ["op_leverage", "interest_coverage", "roice", "fcf_quality", "pledge_trend"]
-
+        # Large-cap disclaimer handling
         if stock_class == "L":
-            gate, fs_score, fs_rating = fundamental_strength(fund)
+            gate, fs_score, fs_rating, veto_reasons = fundamental_strength(fund)
+            
+            # Check for Unverified Vetoes (missing data)
+            unv = []
+            if fund.get("rpt_status", "NOT_FOUND") == "NOT_FOUND" or fund.get("rpt_pct") is None:
+                unv.append("RPT % of Revenue filing missing (NOT_FOUND)")
+            if fund.get("pledge_direction") is None:
+                unv.append("Promoter pledge trend data missing")
+            if fund.get("sector_type") != "financial" and fund.get("fcf_pat_ratio") is None:
+                unv.append("FCF/PAT ratio data missing")
+                
             base["rating"] = "LARGE_CAP_DISCLAIMER"
             base["fundamental_score"] = fs_score
             base["fundamental_rating"] = fs_rating
             base["gate"] = gate
+            base["veto"] = len(veto_reasons) > 0
+            
+            if unv:
+                base["unverified_veto"] = True
+                base["veto_reasons"] = veto_reasons + unv
+            else:
+                base["veto_reasons"] = veto_reasons
+                
             if fs_score is not None:
-                base["display_badge"] = f"⚠️ Large-cap · Fundamentals {fs_score}/100 ({fs_rating}) — rebalancing noise; verify separately"
+                base["display_badge"] = f"⚠️ Large-cap (≥ ₹20,000 Cr) · Fundamentals {fs_score}/100 ({fs_rating}) — rebalancing noise; verify separately"
             else:
                 base["display_badge"] = "⚠️ Large-cap signal — likely rebalancing noise; verify separately"
             return base
 
-        score = 50
-        boosters, drags = [], []
+        # Veto & Unverified Veto Checks (Small & Mid Cap)
         veto_reasons = []
+        unverified_veto_reasons = []
 
-        # ---- vetoes (hard, any class) ----
-        pledge = fund.get("pledge_trend") or [0.0]
-        if fund.get("pledge_direction") == "rising" and (pledge[-1] or 0) >= 0.5:
-            veto_reasons.append(f"Promoter pledge rising QoQ ({fund.get('pledge_trend')})")
+        # Veto 1: RPT %
+        rpt_status = fund.get("rpt_status", "NOT_FOUND")
+        rpt_pct = fund.get("rpt_pct")
+        if rpt_status == "NOT_FOUND" or rpt_pct is None:
+            unverified_veto_reasons.append("RPT % of Revenue filing missing (NOT_FOUND)")
+        elif rpt_pct > PROVISIONAL_RPT_VETO_PCT:
+            veto_reasons.append(f"RPT % of Revenue exceeds veto threshold ({rpt_pct:.1f}% > {PROVISIONAL_RPT_VETO_PCT}%)")
 
+        # Veto 2: Promoter Pledge
+        pledge_dir = fund.get("pledge_direction")
+        pledge = fund.get("pledge_trend") or []
+        if pledge_dir is None:
+            unverified_veto_reasons.append("Promoter pledge trend data missing")
+        elif pledge_dir == "rising" and (pledge[-1] if pledge else 0) >= 0.5:
+            veto_reasons.append(f"Promoter pledge rising QoQ ({pledge})")
+
+        # Veto 3: FCF/PAT Divergence
         is_financial = fund.get("sector_type") == "financial"
         ratio = fund.get("fcf_pat_ratio")
         if is_financial:
-            # OCF is structurally negative for lending businesses (loan
-            # disbursement = operating outflow) — FCF/PAT veto/points don't
-            # apply; the metric is reported as not applicable.
-            base["not_applicable_metrics"] = base.get("not_applicable_metrics", []) + ["fcf_quality"]
-        elif ratio is not None and not math.isclose(ratio, 0) and (ratio > 3.0 or ratio < 1 / 3.0):
+            base["not_applicable_metrics"].append("fcf_quality")
+        elif ratio is None:
+            unverified_veto_reasons.append("FCF/PAT ratio data missing")
+        elif not math.isclose(ratio, 0) and (ratio > 3.0 or ratio < 1 / 3.0):
             veto_reasons.append(f"FCF/PAT 3yr cumulative divergence {ratio:.2f}x (outside [0.33, 3.0])")
-            
+
+        # Handle hard Vetoes
         if veto_reasons:
             base["veto"] = True
             base["veto_reasons"] = veto_reasons
             base["score"] = 0
             base["rating"] = "VETO"
-            base["boosters"] = boosters
-            base["drags"] = drags
             base["display_badge"] = f"🚫 VETO: {veto_reasons[0]}"
             return base
 
-        # ---- pledge points ----
-        if fund.get("pledge_direction") == "falling" and (pledge[-1] or 0) >= 1.0:
-            score += 10
-            boosters.append("Pledge falling QoQ (+10)")
+        # Handle Unverified Veto (missing mandatory veto metrics block clean pass)
+        if unverified_veto_reasons:
+            base["unverified_veto"] = True
+            base["veto_reasons"] = unverified_veto_reasons
+            base["rating"] = "UNVERIFIED_VETO"
 
-        # ---- FCF/PAT points (Removed: evidence shows no short-term momentum edge) ----
-        # ---- Class M full metrics ----
-        if stock_class == "M":
-            ol = fund.get("op_lev_ratio")
-            if ol is not None:
-                if fund.get("op_lev_inflecting"):
-                    score += 25
-                    boosters.append(f"Operating leverage inflecting ({ol:.1f}x, +25)")
-                elif ol > 1.0:
-                    score += 15
-                    boosters.append(f"Operating leverage expanding ({ol:.1f}x, +15)")
-            
-            roice = fund.get("roice_pct")
-            if roice is not None:
-                if roice > 20:
-                    boosters.append(f"RoICE {roice}% (context only, +0)")
-                elif roice >= 10:
-                    boosters.append(f"RoICE {roice}% (context only, +0)")
-                    
-            cov = fund.get("interest_coverage_trend")
-            if cov == "improving":
-                score += 15
-                boosters.append("Interest coverage improving (+15)")
-            elif cov == "deteriorating":
-                score -= 15
-                drags.append("Interest coverage deteriorating (-15)")
+        # Calculate Score Metrics Renormalization
+        gate = _gate_scores(fund)
+        boosters, drags = [], []
 
-        score = max(0, min(100, score))
-        if score >= 75:
+        resolved_weights = 0.0
+        weighted_score_sum = 0.0
+        resolved_count = 0
+
+        for metric, w in METRIC_WEIGHTS.items():
+            if metric in base["not_applicable_metrics"]:
+                continue
+            val = gate.get(metric)
+            if val is not None:
+                resolved_count += 1
+                resolved_weights += w
+                weighted_score_sum += (val * 10) * w
+
+        total_applicable = 6 - len(base["not_applicable_metrics"])
+        base["data_completeness"] = {
+            "resolved_count": resolved_count,
+            "total_count": total_applicable,
+            "label": f"Score based on {resolved_count}/{total_applicable} metrics resolved"
+        }
+
+        if resolved_weights > 0:
+            final_score = round(weighted_score_sum / resolved_weights)
+        else:
+            final_score = 50
+
+        final_score = max(0, min(100, final_score))
+        base["score"] = final_score
+
+        # Boosters & Drags logging
+        if gate.get("op_leverage") and gate["op_leverage"] >= 8:
+            boosters.append(f"Strong Operating Leverage (31% weight, +{gate['op_leverage']*10}/100)")
+        elif gate.get("op_leverage") and gate["op_leverage"] <= 2:
+            drags.append(f"Weak Operating Leverage (31% weight, -{100 - gate['op_leverage']*10}/100)")
+
+        if rpt_pct is not None and rpt_pct > PROVISIONAL_RPT_CAUTION_PCT:
+            drags.append(f"RPT % of Revenue in caution zone ({rpt_pct:.1f}%)")
+
+        if gate.get("interest_coverage") and gate["interest_coverage"] >= 8:
+            boosters.append("Interest coverage improving (+15% weight)")
+        elif gate.get("interest_coverage") and gate["interest_coverage"] <= 2:
+            drags.append("Interest coverage deteriorating (-15% weight)")
+
+        if base["unverified_veto"]:
+            badge = f"⚠️ {final_score} | Unverified — manual check required ({unverified_veto_reasons[0]})"
+            rating = "UNVERIFIED_VETO"
+        elif final_score >= 75:
             rating = "HIGH_CONVICTION"
-            badge = f"⚡ {score} | ✅ No Vetoes"
-        elif score >= 45:
+            badge = f"⚡ {final_score} | ✅ Clean Pass ({base['data_completeness']['label']})"
+        elif final_score >= 45:
             rating = "MODERATE"
-            badge = f"✅ {score} | No Vetoes"
+            badge = f"✅ {final_score} | ({base['data_completeness']['label']})"
         else:
             rating = "LOW"
-            badge = f"⚠️ {score} | Weak fundamentals"
-        if stock_class == "M" and fund.get("op_lev_inflecting"):
-            badge += " | 🚀 Op Lev"
-        base["score"] = score
+            badge = f"⚠️ {final_score} | Weak fundamentals ({base['data_completeness']['label']})"
+
         base["rating"] = rating
         base["boosters"] = boosters
         base["drags"] = drags
